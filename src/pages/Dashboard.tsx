@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Mail, Inbox, AlertTriangle, HardDrive, Clock, LogOut, Search, Menu } from "lucide-react";
+import { Mail, Inbox, AlertTriangle, HardDrive, LogOut, Search, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 import StatCard from "@/components/dashboard/StatCard";
 import CategoryChart from "@/components/dashboard/CategoryChart";
 import StorageChart from "@/components/dashboard/StorageChart";
@@ -16,12 +17,14 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 const Dashboard = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user, signOut } = useAuth();
   const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
   const [selectedEmails, setSelectedEmails] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"overview" | "emails">("overview");
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await signOut();
     navigate("/");
   };
 
@@ -94,7 +97,9 @@ const Dashboard = () => {
           <div className="flex items-center gap-2">
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-background border border-border text-sm">
               <div className="w-2 h-2 bg-success rounded-full" />
-              <span className="text-foreground">user@gmail.com</span>
+              <span className="text-foreground truncate max-w-[150px]">
+                {user?.email || "user@gmail.com"}
+              </span>
             </div>
             <Button variant="ghost" size="icon" onClick={handleLogout}>
               <LogOut className="h-4 w-4" />

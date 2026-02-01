@@ -10,23 +10,58 @@ const chartColors = [
 ];
 
 interface CategoryChartProps {
-  categoryCounts?: Record<string, number>;
+  categoryCounts?: {
+    promotions: number;
+    social: number;
+    updates: number;
+    forums: number;
+    personal: number;
+  } | Record<string, number>;
 }
 
 const CategoryChart = ({ categoryCounts }: CategoryChartProps) => {
-  const data = categoryCounts && Object.keys(categoryCounts).length > 0
-    ? Object.entries(categoryCounts).map(([name, value], index) => ({
+  let data: { name: string; value: number; color: string }[] = [];
+
+  if (categoryCounts) {
+    // Check if it's the specific structure we expect from backend
+    if ('promotions' in categoryCounts && typeof categoryCounts.promotions === 'number') {
+      const stats = categoryCounts as {
+        promotions: number;
+        social: number;
+        updates: number;
+        forums: number;
+        personal: number;
+      };
+      data = [
+        { name: "Personal", value: stats.personal, color: chartColors[0] },
+        { name: "Promotions", value: stats.promotions, color: chartColors[1] },
+        { name: "Social", value: stats.social, color: chartColors[2] },
+        { name: "Updates", value: stats.updates, color: chartColors[3] },
+        { name: "Forums", value: stats.forums, color: chartColors[4] },
+      ].filter(item => item.value > 0);
+    } else {
+      // Fallback for the old Record<string, number> if used elsewhere
+      data = Object.entries(categoryCounts).map(([name, value], index) => ({
         name,
         value,
         color: chartColors[index % chartColors.length],
-      }))
-    : [
-        { name: "Personal", value: 1240, color: chartColors[0] },
-        { name: "Work", value: 890, color: chartColors[1] },
-        { name: "Promotions", value: 2100, color: chartColors[2] },
-        { name: "Newsletters", value: 560, color: chartColors[3] },
-        { name: "Social", value: 340, color: chartColors[4] },
-      ];
+      }));
+    }
+  }
+
+  // If no data, show a placeholder or empty state
+  if (data.length === 0) {
+    return (
+      <Card className="bg-card border-border">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-lg font-semibold">Email Categories</CardTitle>
+        </CardHeader>
+        <CardContent className="h-64 flex items-center justify-center text-muted-foreground">
+          No category data available
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className="bg-card border-border">

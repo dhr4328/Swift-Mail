@@ -6,39 +6,40 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 
 interface FilterGroup {
   name: string;
-  options: { id: string; label: string; count: number }[];
+  options: { id: string; label: string }[];
 }
 
 const filterGroups: FilterGroup[] = [
   {
     name: "Categories",
     options: [
-      { id: "personal", label: "Personal", count: 1240 },
-      { id: "work", label: "Work", count: 890 },
-      { id: "promotions", label: "Promotions", count: 2100 },
-      { id: "newsletters", label: "Newsletters", count: 560 },
-      { id: "social", label: "Social Media", count: 340 },
-      { id: "finance", label: "Finance", count: 180 },
-      { id: "spam", label: "Spam-like", count: 420 },
+      { id: "personal", label: "Personal" },
+      { id: "work", label: "Work" },
+      { id: "promotions", label: "Promotions" },
+      { id: "newsletters", label: "Newsletters" },
+      { id: "social", label: "Social Media" },
+      { id: "finance", label: "Finance" },
+      { id: "spam", label: "Spam-like" },
     ],
   },
   {
     name: "Time Period",
     options: [
-      { id: "1month", label: "Last month", count: 450 },
-      { id: "3months", label: "Last 3 months", count: 1200 },
-      { id: "6months", label: "Last 6 months", count: 2100 },
-      { id: "1year", label: "Last year", count: 3500 },
-      { id: "older", label: "Older than 1 year", count: 1630 },
+      { id: "1month", label: "Last month" },
+      { id: "6months", label: "Last 6 months" },
+      { id: "1year", label: "Last year" },
+      { id: "older", label: "Older than 1 year" },
+      { id: "2years", label: "Older than 2 years" },
+      { id: "3years", label: "Older than 3 years" },
     ],
   },
   {
     name: "Email Type",
     options: [
-      { id: "unread", label: "Unread", count: 234 },
-      { id: "attachments", label: "With attachments", count: 890 },
-      { id: "large", label: "Large (>5MB)", count: 156 },
-      { id: "starred", label: "Starred", count: 45 },
+      { id: "unread", label: "Unread" },
+      { id: "attachments", label: "With attachments" },
+      { id: "large", label: "Large (>5MB)" },
+      { id: "starred", label: "Starred" },
     ],
   },
 ];
@@ -46,10 +47,19 @@ const filterGroups: FilterGroup[] = [
 interface FilterSidebarProps {
   selectedFilters: string[];
   onFilterChange: (filters: string[]) => void;
+  topSenders?: { id: string; label: string }[];
 }
 
-const FilterSidebar = ({ selectedFilters, onFilterChange }: FilterSidebarProps) => {
-  const [openGroups, setOpenGroups] = useState<string[]>(["Categories"]);
+const FilterSidebar = ({ selectedFilters, onFilterChange, topSenders = [] }: FilterSidebarProps) => {
+  const [openGroups, setOpenGroups] = useState<string[]>([]);
+
+  const allGroups = [
+    ...filterGroups,
+    ...(topSenders.length > 0 ? [{
+      name: "Senders",
+      options: topSenders
+    }] : [])
+  ];
 
   const toggleGroup = (groupName: string) => {
     setOpenGroups((prev) =>
@@ -85,7 +95,7 @@ const FilterSidebar = ({ selectedFilters, onFilterChange }: FilterSidebarProps) 
         )}
       </div>
 
-      {filterGroups.map((group) => (
+      {allGroups.map((group) => (
         <Collapsible
           key={group.name}
           open={openGroups.includes(group.name)}
@@ -99,7 +109,7 @@ const FilterSidebar = ({ selectedFilters, onFilterChange }: FilterSidebarProps) 
               <ChevronRight className="h-4 w-4" />
             )}
           </CollapsibleTrigger>
-          <CollapsibleContent className="space-y-2 pt-1">
+          <CollapsibleContent className={`space-y-2 pt-1 ${group.name === "Senders" ? "max-h-80 overflow-y-auto pr-1" : ""}`}>
             {group.options.map((option) => (
               <label
                 key={option.id}
@@ -112,7 +122,6 @@ const FilterSidebar = ({ selectedFilters, onFilterChange }: FilterSidebarProps) 
                   />
                   <span className="text-sm text-foreground">{option.label}</span>
                 </div>
-                <span className="text-xs text-muted-foreground">{option.count}</span>
               </label>
             ))}
           </CollapsibleContent>

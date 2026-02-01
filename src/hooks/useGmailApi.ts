@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/supabaseClient";
 
 export interface Email {
   id: string;
@@ -17,9 +17,15 @@ export interface Email {
 
 export interface GmailStats {
   totalEmails: number;
-  promotions: number;
   unread: number;
-  storageUsed: string;
+  categories: {
+    promotions: number;
+    social: number;
+    updates: number;
+    forums: number;
+    personal: number;
+  };
+  storageUsed?: string;
 }
 
 interface FetchEmailsResponse {
@@ -27,7 +33,8 @@ interface FetchEmailsResponse {
   nextPageToken?: string;
 }
 
-const FUNCTION_URL = `https://nstcwgkoqaepsppjwosk.supabase.co/functions/v1/gmail-api`;
+const FUNCTION_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gmail-api`;
+
 
 export const useGmailApi = () => {
   const [emails, setEmails] = useState<Email[]>([]);
@@ -40,16 +47,21 @@ export const useGmailApi = () => {
 
   const getAuthHeaders = async () => {
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) {
+
+    if (!session) {
+      window.location.href = "/"; // Simple redirect for now
       throw new Error("Not authenticated");
     }
+
     return {
       Authorization: `Bearer ${session.access_token}`,
+      "x-google-token": session.provider_token || "",
+      apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
       "Content-Type": "application/json",
     };
   };
 
-  const fetchEmails = useCallback(async (maxResults: number = 50, reset: boolean = true) => {
+  const fetchEmails = useCallback(async (maxResults: number = 50, reset: boolean = true, query?: string) => {
     if (reset) {
       setLoading(true);
       nextPageTokenRef.current = null;
@@ -57,16 +69,25 @@ export const useGmailApi = () => {
       setLoadingMore(true);
     }
     setError(null);
-    
+
     try {
       const headers = await getAuthHeaders();
       let url = `${FUNCTION_URL}?action=list&maxResults=${maxResults}`;
-      
+
       if (!reset && nextPageTokenRef.current) {
         url += `&pageToken=${encodeURIComponent(nextPageTokenRef.current)}`;
       }
-      
+
+      if (query) {
+        url += `&q=${encodeURIComponent(query)}`;
+      }
+
       const response = await fetch(url, { headers });
+
+      if (response.status === 401) {
+        window.location.href = "/";
+        throw new Error("Unauthorized - Please login again");
+      }
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -74,16 +95,16 @@ export const useGmailApi = () => {
       }
 
       const data: FetchEmailsResponse = await response.json();
-      
+
       nextPageTokenRef.current = data.nextPageToken || null;
       setHasMore(!!data.nextPageToken);
-      
+
       if (reset) {
         setEmails(data.emails);
       } else {
         setEmails((prev) => [...prev, ...data.emails]);
       }
-      
+
       return data;
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to fetch emails";
@@ -95,9 +116,9 @@ export const useGmailApi = () => {
     }
   }, []);
 
-  const loadMoreEmails = useCallback(async () => {
+  const loadMoreEmails = useCallback(async (query?: string) => {
     if (!hasMore || loadingMore || loading) return;
-    return fetchEmails(50, false);
+    return fetchEmails(50, false, query);
   }, [fetchEmails, hasMore, loadingMore, loading]);
 
   const fetchStats = useCallback(async () => {
@@ -105,6 +126,11 @@ export const useGmailApi = () => {
     try {
       const headers = await getAuthHeaders();
       const response = await fetch(`${FUNCTION_URL}?action=stats`, { headers });
+
+      if (response.status === 401) {
+        window.location.href = "/";
+        throw new Error("Unauthorized - Please login again");
+      }
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -131,6 +157,11 @@ export const useGmailApi = () => {
         body: JSON.stringify({ emailIds }),
       });
 
+      if (response.status === 401) {
+        window.location.href = "/";
+        throw new Error("Unauthorized - Please login again");
+      }
+
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || "Failed to trash emails");
@@ -156,6 +187,11 @@ export const useGmailApi = () => {
         body: JSON.stringify({ emailIds }),
       });
 
+      if (response.status === 401) {
+        window.location.href = "/";
+        throw new Error("Unauthorized - Please login again");
+      }
+
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || "Failed to archive emails");
@@ -180,6 +216,11 @@ export const useGmailApi = () => {
         headers,
         body: JSON.stringify({ emailIds }),
       });
+
+      if (response.status === 401) {
+        window.location.href = "/";
+        throw new Error("Unauthorized - Please login again");
+      }
 
       if (!response.ok) {
         const errorData = await response.json();

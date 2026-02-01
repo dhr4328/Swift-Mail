@@ -3,15 +3,15 @@ import { Mail, Sparkles, Shield, Zap, BarChart3, Trash2, Loader2 } from "lucide-
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { lovable } from "@/integrations/lovable";
+import { supabase } from "@/lib/supabaseClient";
 import { useToast } from "@/hooks/use-toast";
 
 const features = [
-  {
-    icon: Sparkles,
-    title: "AI-Powered Sorting",
-    description: "Automatically categorize emails into shopping, personal, work, newsletters, and more.",
-  },
+  // {
+  //   icon: Sparkles,
+  //   title: "AI-Powered Sorting",
+  //   description: "Automatically categorize emails into shopping, personal, work, newsletters, and more.",
+  // },
   {
     icon: Trash2,
     title: "Smart Cleaning",
@@ -49,18 +49,18 @@ const Landing = () => {
   const handleGoogleLogin = async () => {
     setIsLoading(true);
     try {
-      const result = await lovable.auth.signInWithOAuth("google", {
-        redirect_uri: window.location.origin + "/dashboard",
-        scopes: [
-          "https://www.googleapis.com/auth/gmail.readonly",
-          "https://www.googleapis.com/auth/gmail.modify",
-        ],
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: window.location.origin + "/dashboard",
+          scopes: "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.modify",
+        },
       });
-      
-      if (result.error) {
+
+      if (error) {
         toast({
           title: "Login Failed",
-          description: result.error.message || "Could not sign in with Google",
+          description: error.message || "Could not sign in with Google",
           variant: "destructive",
         });
       }
@@ -93,17 +93,17 @@ const Landing = () => {
       {/* Hero Section */}
       <section className="py-20 md:py-32">
         <div className="container mx-auto px-4 text-center">
-          <div className="inline-flex items-center gap-2 bg-card border border-border px-4 py-2 mb-6">
+          {/* <div className="inline-flex items-center gap-2 bg-card border border-border px-4 py-2 mb-6">
             <Sparkles className="h-4 w-4 text-primary" />
             <span className="text-sm text-muted-foreground">AI-Powered Email Organization</span>
-          </div>
-          
+          </div> */}
+
           <h1 className="text-4xl md:text-6xl font-bold text-foreground mb-6 max-w-4xl mx-auto leading-tight">
             Clean Your Gmail Inbox in Minutes, Not Hours
           </h1>
-          
+
           <p className="text-lg md:text-xl text-muted-foreground mb-10 max-w-2xl mx-auto">
-            Use machine learning to automatically categorize, filter, and clean your inbox. 
+            Use machine learning to automatically categorize, filter, and clean your inbox.
             Get smart suggestions and reclaim your productivity.
           </p>
 
@@ -150,7 +150,7 @@ const Landing = () => {
           <h2 className="text-2xl md:text-3xl font-bold text-foreground text-center mb-12">
             Everything You Need to Organize Your Inbox
           </h2>
-          
+
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-5xl mx-auto">
             {features.map((feature) => (
               <div

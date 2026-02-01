@@ -20,7 +20,7 @@ const Dashboard = () => {
   const { toast } = useToast();
   const { user, signOut } = useAuth();
   const { emails, stats, loading, loadingMore, error, hasMore, fetchEmails, loadMoreEmails, fetchStats, trashEmails, archiveEmails, markAsRead } = useGmailApi();
-  
+
   const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
   const [selectedEmails, setSelectedEmails] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -28,13 +28,106 @@ const Dashboard = () => {
 
   // Fetch data on mount
   useEffect(() => {
-    fetchEmails().catch(console.error);
     fetchStats().catch(console.error);
-  }, [fetchEmails, fetchStats]);
+  }, [fetchStats]);
+
+  // Calculate top senders
+  const topSenders = emails.reduce((acc, email) => {
+    const sender = email.sender;
+    const emailAddr = email.senderEmail;
+    const key = `sender:${emailAddr}`;
+    if (!acc[key]) {
+      acc[key] = { id: key, label: sender, count: 0 };
+    }
+    acc[key].count++;
+    return acc;
+  }, {} as Record<string, { id: string; label: string; count: number }>);
+
+  const allSenders = Object.values(topSenders)
+    .sort((a, b) => b.count - a.count)
+    .map(({ id, label }) => ({ id, label }));
+
+  // Construct Gmail query from filters
+  const buildGmailQuery = (filters: string[]) => {
+    if (filters.length === 0) return undefined;
+
+    const categoryMap: Record<string, string> = {
+      personal: "category:personal",
+      work: "category:primary", // Work often falls into primary if not labeled otherwise, or we can use labels
+      promotions: "category:promotions",
+      newsletters: "category:updates", // Updates is closest to newsletters
+      social: "category:social",
+      finance: "category:updates", // Finance often in updates
+      spam: "in:spam",
+    };
+
+    const typeMap: Record<string, string> = {
+      unread: "is:unread",
+      attachments: "has:attachment",
+      large: "larger:5M",
+      starred: "is:starred",
+    };
+
+    const timeMap: Record<string, string> = {
+      "1month": "newer_than:1m",
+      "6months": "newer_than:6m",
+      "1year": "newer_than:1y",
+      "older": "older_than:1y",
+      "2years": "older_than:2y",
+      "3years": "older_than:3y",
+    };
+
+    const categories = filters.filter(f => categoryMap[f]).map(f => categoryMap[f]);
+    const types = filters.filter(f => typeMap[f]).map(f => typeMap[f]);
+    const times = filters.filter(f => timeMap[f]).map(f => timeMap[f]);
+    const senders = filters.filter(f => f.startsWith("sender:")).map(f => `from:${f.split(":")[1]}`);
+
+    // Combine logic: Categories with OR, others with AND
+    let queryParts = [];
+
+    if (categories.length > 0) {
+      if (categories.length > 1) {
+        queryParts.push(`{${categories.join(" ")}}`); // {cat1 cat2} means OR in Gmail search
+      } else {
+        queryParts.push(categories[0]);
+      }
+    }
+
+    if (types.length > 0) queryParts.push(...types);
+    if (times.length > 0) queryParts.push(...times);
+    if (senders.length > 0) {
+      if (senders.length > 1) {
+        queryParts.push(`{${senders.join(" ")}}`); // OR for multiple senders
+      } else {
+        queryParts.push(senders[0]);
+      }
+    }
+
+    return queryParts.join(" ");
+  };
+
+  // ... rest of UseEffect ...
+
+  // ... inside render ...
+
+
+  // Fetch emails when filters or search query changes
+  useEffect(() => {
+    const filterQuery = buildGmailQuery(selectedFilters);
+    // Combine filter query with search bar query if both exist
+    let finalQuery = filterQuery;
+    if (searchQuery) {
+      finalQuery = finalQuery ? `${finalQuery} ${searchQuery}` : searchQuery;
+    }
+
+    // Debounce could be added here if needed, but for now direct call
+    fetchEmails(50, true, finalQuery).catch(console.error);
+  }, [fetchEmails, selectedFilters, searchQuery]); // Added searchQuery to dependency to trigger server-side search
 
   const handleRefresh = async () => {
     try {
-      await Promise.all([fetchEmails(), fetchStats()]);
+      const query = buildGmailQuery(selectedFilters);
+      await Promise.all([fetchEmails(50, true, query ? (searchQuery ? `${query} ${searchQuery}` : query) : searchQuery), fetchStats()]);
       toast({
         title: "Refreshed",
         description: "Email list updated successfully.",
@@ -44,8 +137,14 @@ const Dashboard = () => {
         title: "Error",
         description: error || "Failed to refresh emails.",
         variant: "destructive",
+        duration: 3000,
       });
     }
+  };
+
+  const currentQuery = () => {
+    const q = buildGmailQuery(selectedFilters);
+    return q ? (searchQuery ? `${q} ${searchQuery}` : q) : searchQuery;
   };
 
   const handleLogout = async () => {
@@ -55,7 +154,7 @@ const Dashboard = () => {
 
   const handleDelete = async () => {
     if (selectedEmails.length === 0) return;
-    
+
     try {
       const result = await trashEmails(selectedEmails);
       toast({
@@ -74,7 +173,7 @@ const Dashboard = () => {
 
   const handleArchive = async () => {
     if (selectedEmails.length === 0) return;
-    
+
     try {
       const result = await archiveEmails(selectedEmails);
       toast({
@@ -93,7 +192,7 @@ const Dashboard = () => {
 
   const handleMarkRead = async () => {
     if (selectedEmails.length === 0) return;
-    
+
     try {
       const result = await markAsRead(selectedEmails);
       toast({
@@ -110,23 +209,21 @@ const Dashboard = () => {
     }
   };
 
-  // Filter emails based on search query
-  const filteredEmails = emails.filter((email) => {
-    if (!searchQuery) return true;
-    const query = searchQuery.toLowerCase();
-    return (
-      email.sender.toLowerCase().includes(query) ||
-      email.senderEmail.toLowerCase().includes(query) ||
-      email.subject.toLowerCase().includes(query) ||
-      email.preview.toLowerCase().includes(query)
-    );
-  });
+  // Filter emails based on search query - REMOVE client side filtering since we do server side now
+  // OR keep it for instant feedback on loaded items, but usually better to rely on server for consistency
+  // For now I'll just pass `emails` strictly since `fetchEmails` handles the filtering
+  const filteredEmails = emails;
 
   // Calculate category counts for charts
   const categoryCounts = emails.reduce((acc, email) => {
     acc[email.category] = (acc[email.category] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
+
+  const handleSuggestionClick = (filterId: string) => {
+    setActiveTab("emails");
+    setSelectedFilters([filterId]);
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -144,6 +241,7 @@ const Dashboard = () => {
                 <FilterSidebar
                   selectedFilters={selectedFilters}
                   onFilterChange={setSelectedFilters}
+                  topSenders={allSenders}
                 />
               </SheetContent>
             </Sheet>
@@ -152,7 +250,7 @@ const Dashboard = () => {
               Smart Gmail Cleaner
             </span>
           </div>
-          
+
           <div className="flex-1 max-w-md">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -188,21 +286,19 @@ const Dashboard = () => {
           <nav className="flex gap-6">
             <button
               onClick={() => setActiveTab("overview")}
-              className={`py-3 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === "overview"
-                  ? "border-primary text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
+              className={`py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === "overview"
+                ? "border-primary text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
             >
               Overview
             </button>
             <button
               onClick={() => setActiveTab("emails")}
-              className={`py-3 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === "emails"
-                  ? "border-primary text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
+              className={`py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === "emails"
+                ? "border-primary text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
             >
               Emails
             </button>
@@ -215,7 +311,7 @@ const Dashboard = () => {
         {activeTab === "overview" ? (
           <div className="space-y-6">
             {/* Stats Grid */}
-            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className={`grid sm:grid-cols-2 ${stats?.storageUsed ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-4`}>
               <StatCard
                 title="Total Emails"
                 value={stats?.totalEmails?.toLocaleString() || emails.length.toString()}
@@ -224,10 +320,9 @@ const Dashboard = () => {
               />
               <StatCard
                 title="Promotions"
-                value={stats?.promotions?.toLocaleString() || categoryCounts['Promotions']?.toString() || "0"}
+                value={stats?.categories.promotions.toLocaleString() || categoryCounts['Promotions']?.toString() || "0"}
                 icon={Mail}
-                description={`${stats?.promotions ? Math.round((stats.promotions / (stats.totalEmails || 1)) * 100) : 0}% of inbox`}
-                trend={{ value: 12, positive: false }}
+                description={`${stats?.categories.promotions ? Math.round((stats.categories.promotions / (stats.totalEmails || 1)) * 100) : 0}% of inbox`}
               />
               <StatCard
                 title="Unread"
@@ -235,22 +330,24 @@ const Dashboard = () => {
                 icon={AlertTriangle}
                 description="Needs attention"
               />
-              <StatCard
-                title="Storage Used"
-                value={stats?.storageUsed || "Calculating..."}
-                icon={HardDrive}
-                description="of 15 GB"
-              />
+              {stats?.storageUsed && (
+                <StatCard
+                  title="Storage Used"
+                  value={stats.storageUsed}
+                  icon={HardDrive}
+                  description="of 15 GB"
+                />
+              )}
             </div>
 
             {/* Charts Row */}
-            <div className="grid lg:grid-cols-2 gap-6">
-              <CategoryChart categoryCounts={categoryCounts} />
-              <StorageChart />
+            <div className={`grid ${stats?.storageUsed ? 'lg:grid-cols-2' : 'lg:grid-cols-1'} gap-6`}>
+              <CategoryChart categoryCounts={stats?.categories} />
+              {stats?.storageUsed && <StorageChart />}
             </div>
 
             {/* Cleaning Suggestions */}
-            <CleaningSuggestions />
+            <CleaningSuggestions stats={stats} onApplyFilter={handleSuggestionClick} />
           </div>
         ) : (
           <div className="flex gap-6">
@@ -259,6 +356,7 @@ const Dashboard = () => {
               <FilterSidebar
                 selectedFilters={selectedFilters}
                 onFilterChange={setSelectedFilters}
+                topSenders={allSenders}
               />
             </div>
 
@@ -278,7 +376,7 @@ const Dashboard = () => {
                 loading={loading}
                 loadingMore={loadingMore}
                 hasMore={hasMore}
-                onLoadMore={loadMoreEmails}
+                onLoadMore={() => loadMoreEmails(currentQuery())}
               />
             </div>
           </div>

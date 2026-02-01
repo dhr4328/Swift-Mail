@@ -1,8 +1,9 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version, x-google-token',
+  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
 };
 
 interface GmailMessage {
@@ -114,11 +115,14 @@ interface FetchEmailsResult {
   nextPageToken?: string;
 }
 
-async function fetchEmails(accessToken: string, maxResults: number = 50, pageToken?: string): Promise<FetchEmailsResult> {
+async function fetchEmails(accessToken: string, maxResults: number = 50, pageToken?: string, q?: string): Promise<FetchEmailsResult> {
   // Build URL with optional pageToken for pagination
   let url = `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${maxResults}`;
   if (pageToken) {
     url += `&pageToken=${encodeURIComponent(pageToken)}`;
+  }
+  if (q) {
+    url += `&q=${encodeURIComponent(q)}`;
   }
 
   const listResponse = await fetch(url, {
@@ -226,11 +230,17 @@ async function markAsRead(accessToken: string, emailIds: string[]): Promise<{ su
 
 async function getStats(accessToken: string): Promise<{
   totalEmails: number;
-  promotions: number;
   unread: number;
-  storageUsed: string;
+  categories: {
+    promotions: number;
+    social: number;
+    updates: number;
+    forums: number;
+    personal: number;
+  };
+  storageUsed?: string;
 }> {
-  // Get profile for storage info
+  // Get profile for total counts
   const profileResponse = await fetch(
     'https://gmail.googleapis.com/gmail/v1/users/me/profile',
     {
@@ -238,66 +248,58 @@ async function getStats(accessToken: string): Promise<{
     }
   );
 
-  let storageUsed = '0 B';
+  let totalEmails = 0;
   if (profileResponse.ok) {
     const profile = await profileResponse.json();
-    // Gmail doesn't directly give storage, estimate from message count
+    totalEmails = profile.messagesTotal || 0;
   }
 
-  // Get total message count
-  const messagesResponse = await fetch(
-    'https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=1',
-    {
-      headers: { Authorization: `Bearer ${accessToken}` },
+  // Helper to get count for a label
+  const getLabelCount = async (labelId: string): Promise<number> => {
+    const response = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages?labelIds=${labelId}&maxResults=1`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }
+    );
+    if (response.ok) {
+      const data = await response.json();
+      return data.resultSizeEstimate || 0;
     }
-  );
+    return 0;
+  };
 
-  let totalEmails = 0;
-  if (messagesResponse.ok) {
-    const data = await messagesResponse.json();
-    totalEmails = data.resultSizeEstimate || 0;
-  }
+  const [unread, promotions, social, updates, forums] = await Promise.all([
+    getLabelCount('UNREAD'),
+    getLabelCount('CATEGORY_PROMOTIONS'),
+    getLabelCount('CATEGORY_SOCIAL'),
+    getLabelCount('CATEGORY_UPDATES'),
+    getLabelCount('CATEGORY_FORUMS'),
+  ]);
 
-  // Get promotions count
-  const promoResponse = await fetch(
-    'https://gmail.googleapis.com/gmail/v1/users/me/messages?labelIds=CATEGORY_PROMOTIONS&maxResults=1',
-    {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    }
-  );
-
-  let promotions = 0;
-  if (promoResponse.ok) {
-    const data = await promoResponse.json();
-    promotions = data.resultSizeEstimate || 0;
-  }
-
-  // Get unread count
-  const unreadResponse = await fetch(
-    'https://gmail.googleapis.com/gmail/v1/users/me/messages?labelIds=UNREAD&maxResults=1',
-    {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    }
-  );
-
-  let unread = 0;
-  if (unreadResponse.ok) {
-    const data = await unreadResponse.json();
-    unread = data.resultSizeEstimate || 0;
-  }
+  // Personal is usually what's left, or we can approximate it. 
+  // Since we can't easily query "Excluding all other categories", we'll infer it or just leave it for now.
+  // A simple approximation for Personal is Total - (Promotions + Social + Updates + Forums).
+  // Note: resultSizeEstimate is an estimate, so this might be negative effectively, so we clamp it.
+  const personal = Math.max(0, totalEmails - (promotions + social + updates + forums));
 
   return {
     totalEmails,
-    promotions,
     unread,
-    storageUsed: '7.5 GB', // Placeholder - Gmail API doesn't expose exact storage
+    categories: {
+      promotions,
+      social,
+      updates,
+      forums,
+      personal
+    }
   };
 }
 
 Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response('ok', { headers: corsHeaders, status: 200 });
   }
 
   try {
@@ -328,17 +330,17 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Get the session to access the provider token
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    // Get the Google access token from the custom header
+    const googleAccessToken = req.headers.get('x-google-token');
 
-    if (sessionError || !session?.provider_token) {
+    if (!googleAccessToken) {
       return new Response(
-        JSON.stringify({ error: 'No Google access token available. Please sign in again.' }),
+        JSON.stringify({ error: 'No Google access token provided. Please sign in again.' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const googleAccessToken = session.provider_token;
+    // Token is already retrieved above
     const url = new URL(req.url);
     const action = url.searchParams.get('action') || 'list';
 
@@ -348,7 +350,8 @@ Deno.serve(async (req) => {
       case 'list': {
         const maxResults = parseInt(url.searchParams.get('maxResults') || '50');
         const pageToken = url.searchParams.get('pageToken') || undefined;
-        result = await fetchEmails(googleAccessToken, maxResults, pageToken);
+        const q = url.searchParams.get('q') || undefined;
+        result = await fetchEmails(googleAccessToken, maxResults, pageToken, q);
         break;
       }
       case 'trash': {

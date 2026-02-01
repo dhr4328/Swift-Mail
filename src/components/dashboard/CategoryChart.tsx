@@ -1,15 +1,33 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
 
-const data = [
-  { name: "Personal", value: 1240, color: "hsl(var(--chart-1))" },
-  { name: "Work", value: 890, color: "hsl(var(--chart-2))" },
-  { name: "Promotions", value: 2100, color: "hsl(var(--chart-3))" },
-  { name: "Newsletters", value: 560, color: "hsl(var(--chart-4))" },
-  { name: "Social", value: 340, color: "hsl(var(--chart-5))" },
+const chartColors = [
+  "hsl(var(--chart-1))",
+  "hsl(var(--chart-2))",
+  "hsl(var(--chart-3))",
+  "hsl(var(--chart-4))",
+  "hsl(var(--chart-5))",
 ];
 
-const CategoryChart = () => {
+interface CategoryChartProps {
+  categoryCounts?: Record<string, number>;
+}
+
+const CategoryChart = ({ categoryCounts }: CategoryChartProps) => {
+  const data = categoryCounts && Object.keys(categoryCounts).length > 0
+    ? Object.entries(categoryCounts).map(([name, value], index) => ({
+        name,
+        value,
+        color: chartColors[index % chartColors.length],
+      }))
+    : [
+        { name: "Personal", value: 1240, color: chartColors[0] },
+        { name: "Work", value: 890, color: chartColors[1] },
+        { name: "Promotions", value: 2100, color: chartColors[2] },
+        { name: "Newsletters", value: 560, color: chartColors[3] },
+        { name: "Social", value: 340, color: chartColors[4] },
+      ];
+
   return (
     <Card className="bg-card border-border">
       <CardHeader className="pb-2">

@@ -1,10 +1,11 @@
-import { useState } from "react";
-import { Mail, Inbox, AlertTriangle, HardDrive, LogOut, Search, Menu } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Mail, Inbox, AlertTriangle, HardDrive, LogOut, Search, Menu, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { useGmailApi } from "@/hooks/useGmailApi";
 import StatCard from "@/components/dashboard/StatCard";
 import CategoryChart from "@/components/dashboard/CategoryChart";
 import StorageChart from "@/components/dashboard/StorageChart";
@@ -18,44 +19,114 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user, signOut } = useAuth();
+  const { emails, stats, loading, error, fetchEmails, fetchStats, trashEmails, archiveEmails, markAsRead } = useGmailApi();
+  
   const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
   const [selectedEmails, setSelectedEmails] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"overview" | "emails">("overview");
+
+  // Fetch data on mount
+  useEffect(() => {
+    fetchEmails().catch(console.error);
+    fetchStats().catch(console.error);
+  }, [fetchEmails, fetchStats]);
+
+  const handleRefresh = async () => {
+    try {
+      await Promise.all([fetchEmails(), fetchStats()]);
+      toast({
+        title: "Refreshed",
+        description: "Email list updated successfully.",
+      });
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: error || "Failed to refresh emails.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const handleLogout = async () => {
     await signOut();
     navigate("/");
   };
 
-  const handleDelete = () => {
-    toast({
-      title: "Moved to Trash",
-      description: `${selectedEmails.length} email(s) moved to trash. Undo?`,
-      action: (
-        <Button variant="outline" size="sm" onClick={() => setSelectedEmails([])}>
-          Undo
-        </Button>
-      ),
-    });
-    setSelectedEmails([]);
+  const handleDelete = async () => {
+    if (selectedEmails.length === 0) return;
+    
+    try {
+      const result = await trashEmails(selectedEmails);
+      toast({
+        title: "Moved to Trash",
+        description: `${result.trashedCount} email(s) moved to trash.`,
+      });
+      setSelectedEmails([]);
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: "Failed to move emails to trash.",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleArchive = () => {
-    toast({
-      title: "Archived",
-      description: `${selectedEmails.length} email(s) archived successfully.`,
-    });
-    setSelectedEmails([]);
+  const handleArchive = async () => {
+    if (selectedEmails.length === 0) return;
+    
+    try {
+      const result = await archiveEmails(selectedEmails);
+      toast({
+        title: "Archived",
+        description: `${result.archivedCount} email(s) archived successfully.`,
+      });
+      setSelectedEmails([]);
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: "Failed to archive emails.",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleMarkRead = () => {
-    toast({
-      title: "Marked as Read",
-      description: `${selectedEmails.length} email(s) marked as read.`,
-    });
-    setSelectedEmails([]);
+  const handleMarkRead = async () => {
+    if (selectedEmails.length === 0) return;
+    
+    try {
+      const result = await markAsRead(selectedEmails);
+      toast({
+        title: "Marked as Read",
+        description: `${result.markedCount} email(s) marked as read.`,
+      });
+      setSelectedEmails([]);
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: "Failed to mark emails as read.",
+        variant: "destructive",
+      });
+    }
   };
+
+  // Filter emails based on search query
+  const filteredEmails = emails.filter((email) => {
+    if (!searchQuery) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      email.sender.toLowerCase().includes(query) ||
+      email.senderEmail.toLowerCase().includes(query) ||
+      email.subject.toLowerCase().includes(query) ||
+      email.preview.toLowerCase().includes(query)
+    );
+  });
+
+  // Calculate category counts for charts
+  const categoryCounts = emails.reduce((acc, email) => {
+    acc[email.category] = (acc[email.category] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
 
   return (
     <div className="min-h-screen bg-background">
@@ -95,6 +166,9 @@ const Dashboard = () => {
           </div>
 
           <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" onClick={handleRefresh} disabled={loading}>
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            </Button>
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-background border border-border text-sm">
               <div className="w-2 h-2 bg-success rounded-full" />
               <span className="text-foreground truncate max-w-[150px]">
@@ -144,26 +218,26 @@ const Dashboard = () => {
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <StatCard
                 title="Total Emails"
-                value="5,130"
+                value={stats?.totalEmails?.toLocaleString() || emails.length.toString()}
                 icon={Inbox}
                 description="In your inbox"
               />
               <StatCard
                 title="Promotions"
-                value="2,100"
+                value={stats?.promotions?.toLocaleString() || categoryCounts['Promotions']?.toString() || "0"}
                 icon={Mail}
-                description="40.9% of inbox"
+                description={`${stats?.promotions ? Math.round((stats.promotions / (stats.totalEmails || 1)) * 100) : 0}% of inbox`}
                 trend={{ value: 12, positive: false }}
               />
               <StatCard
-                title="Spam-like"
-                value="420"
+                title="Unread"
+                value={stats?.unread?.toLocaleString() || emails.filter(e => !e.isRead).length.toString()}
                 icon={AlertTriangle}
                 description="Needs attention"
               />
               <StatCard
                 title="Storage Used"
-                value="7.5 GB"
+                value={stats?.storageUsed || "Calculating..."}
                 icon={HardDrive}
                 description="of 15 GB"
               />
@@ -171,7 +245,7 @@ const Dashboard = () => {
 
             {/* Charts Row */}
             <div className="grid lg:grid-cols-2 gap-6">
-              <CategoryChart />
+              <CategoryChart categoryCounts={categoryCounts} />
               <StorageChart />
             </div>
 
@@ -198,8 +272,10 @@ const Dashboard = () => {
                 onMarkRead={handleMarkRead}
               />
               <EmailList
+                emails={filteredEmails}
                 selectedEmails={selectedEmails}
                 onSelectionChange={setSelectedEmails}
+                loading={loading}
               />
             </div>
           </div>

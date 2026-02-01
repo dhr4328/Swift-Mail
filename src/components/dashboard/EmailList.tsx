@@ -1,102 +1,7 @@
-import { useState } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Paperclip, Star, StarIcon } from "lucide-react";
-
-interface Email {
-  id: string;
-  sender: string;
-  senderEmail: string;
-  subject: string;
-  preview: string;
-  date: string;
-  category: string;
-  size: string;
-  hasAttachment: boolean;
-  isStarred: boolean;
-  isRead: boolean;
-}
-
-const mockEmails: Email[] = [
-  {
-    id: "1",
-    sender: "Amazon",
-    senderEmail: "noreply@amazon.com",
-    subject: "Your order has shipped!",
-    preview: "Track your package - expected delivery...",
-    date: "2 hours ago",
-    category: "Promotions",
-    size: "124 KB",
-    hasAttachment: false,
-    isStarred: false,
-    isRead: true,
-  },
-  {
-    id: "2",
-    sender: "LinkedIn",
-    senderEmail: "notifications@linkedin.com",
-    subject: "You have 5 new connection requests",
-    preview: "John Doe and 4 others want to connect...",
-    date: "5 hours ago",
-    category: "Social",
-    size: "89 KB",
-    hasAttachment: false,
-    isStarred: false,
-    isRead: false,
-  },
-  {
-    id: "3",
-    sender: "Sarah Johnson",
-    senderEmail: "sarah.j@company.com",
-    subject: "Q4 Report - Review needed",
-    preview: "Hi, please review the attached Q4 report...",
-    date: "Yesterday",
-    category: "Work",
-    size: "2.4 MB",
-    hasAttachment: true,
-    isStarred: true,
-    isRead: true,
-  },
-  {
-    id: "4",
-    sender: "Substack",
-    senderEmail: "newsletter@substack.com",
-    subject: "Weekly digest: Top stories this week",
-    preview: "This week in tech: AI developments and more...",
-    date: "2 days ago",
-    category: "Newsletters",
-    size: "156 KB",
-    hasAttachment: false,
-    isStarred: false,
-    isRead: true,
-  },
-  {
-    id: "5",
-    sender: "Chase Bank",
-    senderEmail: "alerts@chase.com",
-    subject: "Your monthly statement is ready",
-    preview: "Your January statement is now available...",
-    date: "3 days ago",
-    category: "Finance",
-    size: "890 KB",
-    hasAttachment: true,
-    isStarred: false,
-    isRead: false,
-  },
-  {
-    id: "6",
-    sender: "Netflix",
-    senderEmail: "info@netflix.com",
-    subject: "New releases this week",
-    preview: "Check out what's new on Netflix...",
-    date: "4 days ago",
-    category: "Promotions",
-    size: "234 KB",
-    hasAttachment: false,
-    isStarred: false,
-    isRead: true,
-  },
-];
+import { Paperclip, Star, Loader2 } from "lucide-react";
+import type { Email } from "@/hooks/useGmailApi";
 
 const categoryColors: Record<string, string> = {
   Personal: "bg-primary/20 text-primary",
@@ -105,14 +10,19 @@ const categoryColors: Record<string, string> = {
   Newsletters: "bg-accent text-accent-foreground",
   Social: "bg-primary/10 text-foreground",
   Finance: "bg-secondary/20 text-foreground",
+  Updates: "bg-muted text-muted-foreground",
+  Forums: "bg-accent/50 text-accent-foreground",
+  Notifications: "bg-secondary/30 text-secondary-foreground",
 };
 
 interface EmailListProps {
+  emails: Email[];
   selectedEmails: string[];
   onSelectionChange: (emails: string[]) => void;
+  loading?: boolean;
 }
 
-const EmailList = ({ selectedEmails, onSelectionChange }: EmailListProps) => {
+const EmailList = ({ emails, selectedEmails, onSelectionChange, loading }: EmailListProps) => {
   const toggleEmail = (emailId: string) => {
     onSelectionChange(
       selectedEmails.includes(emailId)
@@ -122,19 +32,38 @@ const EmailList = ({ selectedEmails, onSelectionChange }: EmailListProps) => {
   };
 
   const toggleAll = () => {
-    if (selectedEmails.length === mockEmails.length) {
+    if (selectedEmails.length === emails.length) {
       onSelectionChange([]);
     } else {
-      onSelectionChange(mockEmails.map((e) => e.id));
+      onSelectionChange(emails.map((e) => e.id));
     }
   };
+
+  if (loading) {
+    return (
+      <div className="flex-1 bg-card border border-border flex items-center justify-center py-20">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-muted-foreground">Loading emails...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (emails.length === 0) {
+    return (
+      <div className="flex-1 bg-card border border-border flex items-center justify-center py-20">
+        <p className="text-muted-foreground">No emails found</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 bg-card border border-border">
       {/* Table Header */}
       <div className="flex items-center gap-4 px-4 py-3 border-b border-border bg-background">
         <Checkbox
-          checked={selectedEmails.length === mockEmails.length && mockEmails.length > 0}
+          checked={selectedEmails.length === emails.length && emails.length > 0}
           onCheckedChange={toggleAll}
         />
         <div className="flex-1 grid grid-cols-12 gap-4 text-sm font-medium text-muted-foreground">
@@ -148,7 +77,7 @@ const EmailList = ({ selectedEmails, onSelectionChange }: EmailListProps) => {
 
       {/* Email Rows */}
       <div className="divide-y divide-border">
-        {mockEmails.map((email) => (
+        {emails.map((email) => (
           <div
             key={email.id}
             className={`flex items-center gap-4 px-4 py-3 hover:bg-background transition-colors cursor-pointer ${

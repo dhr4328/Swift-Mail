@@ -188,8 +188,12 @@ const Landing = () => {
 
       {/* Footer */}
       <footer className="border-t border-border py-8">
-        <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
-          <p>© 2024 Smart Gmail Cleaner. Your emails, your privacy.</p>
+        <div className="container mx-auto px-4 text-center text-sm text-muted-foreground flex flex-col md:flex-row justify-between items-center gap-4">
+          <p>© {new Date().getFullYear()} Swift Mail. Your emails, your privacy.</p>
+          <div className="flex gap-6">
+            <a href="/terms" className="hover:underline hover:text-foreground transition-colors">Terms of Service</a>
+            <a href="/privacy" className="hover:underline hover:text-foreground transition-colors">Privacy Policy</a>
+          </div>
         </div>
       </footer>
     </div>

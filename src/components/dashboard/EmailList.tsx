@@ -1,3 +1,4 @@
+import { useEffect, useRef, useCallback } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Paperclip, Star, Loader2 } from "lucide-react";
@@ -20,9 +21,23 @@ interface EmailListProps {
   selectedEmails: string[];
   onSelectionChange: (emails: string[]) => void;
   loading?: boolean;
+  loadingMore?: boolean;
+  hasMore?: boolean;
+  onLoadMore?: () => void;
 }
 
-const EmailList = ({ emails, selectedEmails, onSelectionChange, loading }: EmailListProps) => {
+const EmailList = ({
+  emails,
+  selectedEmails,
+  onSelectionChange,
+  loading,
+  loadingMore,
+  hasMore,
+  onLoadMore,
+}: EmailListProps) => {
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+
   const toggleEmail = (emailId: string) => {
     onSelectionChange(
       selectedEmails.includes(emailId)
@@ -38,6 +53,36 @@ const EmailList = ({ emails, selectedEmails, onSelectionChange, loading }: Email
       onSelectionChange(emails.map((e) => e.id));
     }
   };
+
+  // Infinite scroll observer
+  const handleObserver = useCallback(
+    (entries: IntersectionObserverEntry[]) => {
+      const [target] = entries;
+      if (target.isIntersecting && hasMore && !loadingMore && onLoadMore) {
+        onLoadMore();
+      }
+    },
+    [hasMore, loadingMore, onLoadMore]
+  );
+
+  useEffect(() => {
+    const element = loadMoreRef.current;
+    if (!element) return;
+
+    observerRef.current = new IntersectionObserver(handleObserver, {
+      root: null,
+      rootMargin: "100px",
+      threshold: 0,
+    });
+
+    observerRef.current.observe(element);
+
+    return () => {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+      }
+    };
+  }, [handleObserver]);
 
   if (loading) {
     return (
@@ -128,6 +173,24 @@ const EmailList = ({ emails, selectedEmails, onSelectionChange, loading }: Email
           </div>
         ))}
       </div>
+
+      {/* Load More Trigger */}
+      <div ref={loadMoreRef} className="h-1" />
+      
+      {/* Loading More Indicator */}
+      {loadingMore && (
+        <div className="flex items-center justify-center py-4 border-t border-border">
+          <Loader2 className="h-5 w-5 animate-spin text-primary mr-2" />
+          <span className="text-sm text-muted-foreground">Loading more emails...</span>
+        </div>
+      )}
+      
+      {/* End of List */}
+      {!hasMore && emails.length > 0 && (
+        <div className="text-center py-4 border-t border-border">
+          <span className="text-sm text-muted-foreground">No more emails to load</span>
+        </div>
+      )}
     </div>
   );
 };

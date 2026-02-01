@@ -109,14 +109,21 @@ function parseEmail(message: GmailMessage): EmailData {
   };
 }
 
-async function fetchEmails(accessToken: string, maxResults: number = 50): Promise<EmailData[]> {
-  // Fetch message list
-  const listResponse = await fetch(
-    `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${maxResults}`,
-    {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    }
-  );
+interface FetchEmailsResult {
+  emails: EmailData[];
+  nextPageToken?: string;
+}
+
+async function fetchEmails(accessToken: string, maxResults: number = 50, pageToken?: string): Promise<FetchEmailsResult> {
+  // Build URL with optional pageToken for pagination
+  let url = `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${maxResults}`;
+  if (pageToken) {
+    url += `&pageToken=${encodeURIComponent(pageToken)}`;
+  }
+
+  const listResponse = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
 
   if (!listResponse.ok) {
     const error = await listResponse.text();
@@ -125,6 +132,7 @@ async function fetchEmails(accessToken: string, maxResults: number = 50): Promis
 
   const listData = await listResponse.json();
   const messages = listData.messages || [];
+  const nextPageToken = listData.nextPageToken;
 
   // Fetch full message details in parallel (batch of 10)
   const emails: EmailData[] = [];
@@ -151,7 +159,7 @@ async function fetchEmails(accessToken: string, maxResults: number = 50): Promis
     emails.push(...batchResults.filter((e): e is EmailData => e !== null));
   }
 
-  return emails;
+  return { emails, nextPageToken };
 }
 
 async function trashEmails(accessToken: string, emailIds: string[]): Promise<{ success: boolean; trashedCount: number }> {
@@ -339,7 +347,8 @@ Deno.serve(async (req) => {
     switch (action) {
       case 'list': {
         const maxResults = parseInt(url.searchParams.get('maxResults') || '50');
-        result = await fetchEmails(googleAccessToken, maxResults);
+        const pageToken = url.searchParams.get('pageToken') || undefined;
+        result = await fetchEmails(googleAccessToken, maxResults, pageToken);
         break;
       }
       case 'trash': {

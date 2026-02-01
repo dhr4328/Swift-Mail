@@ -7,9 +7,19 @@ const lovableAuth = createLovableAuth({});
 
 export const lovable = {
   auth: {
-    signInWithOAuth: async (provider: "google" | "apple", opts?: { redirect_uri?: string }) => {
+    signInWithOAuth: async (
+      provider: "google" | "apple",
+      opts?: { redirect_uri?: string; scopes?: string[] }
+    ) => {
+      // Build extra params with Gmail scopes for Google provider
+      const extraParams: Record<string, string> = {};
+      if (provider === "google" && opts?.scopes) {
+        extraParams.scope = opts.scopes.join(" ");
+      }
+
       const result = await lovableAuth.signInWithOAuth(provider, {
-        ...opts,
+        redirect_uri: opts?.redirect_uri,
+        extraParams: Object.keys(extraParams).length > 0 ? extraParams : undefined,
       });
 
       if (result.redirected) {

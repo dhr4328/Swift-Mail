@@ -19,7 +19,7 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user, signOut } = useAuth();
-  const { emails, stats, loading, error, fetchEmails, fetchStats, trashEmails, archiveEmails, markAsRead } = useGmailApi();
+  const { emails, stats, loading, loadingMore, error, hasMore, fetchEmails, loadMoreEmails, fetchStats, trashEmails, archiveEmails, markAsRead } = useGmailApi();
   
   const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
   const [selectedEmails, setSelectedEmails] = useState<string[]>([]);
@@ -276,6 +276,9 @@ const Dashboard = () => {
                 selectedEmails={selectedEmails}
                 onSelectionChange={setSelectedEmails}
                 loading={loading}
+                loadingMore={loadingMore}
+                hasMore={hasMore}
+                onLoadMore={loadMoreEmails}
               />
             </div>
           </div>

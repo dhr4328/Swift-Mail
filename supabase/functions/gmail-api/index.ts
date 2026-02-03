@@ -167,65 +167,80 @@ async function fetchEmails(accessToken: string, maxResults: number = 50, pageTok
 }
 
 async function trashEmails(accessToken: string, emailIds: string[]): Promise<{ success: boolean; trashedCount: number }> {
-  const results = await Promise.all(
-    emailIds.map(async (id) => {
-      const response = await fetch(
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}/trash`,
-        {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${accessToken}` },
-        }
-      );
-      return response.ok;
-    })
+  // Frontend handles chunking now, so we can process what we get directly.
+  // max supported by Gmail is 1000. Frontend sends 50.
+  const response = await fetch(
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages/batchModify`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        ids: emailIds,
+        addLabelIds: ['TRASH']
+      }),
+    }
   );
 
-  const trashedCount = results.filter(Boolean).length;
-  return { success: trashedCount === emailIds.length, trashedCount };
+  if (!response.ok) {
+    const error = await response.text();
+    console.error('Batch trash error:', error);
+    return { success: false, trashedCount: 0 };
+  }
+
+  return { success: true, trashedCount: emailIds.length };
 }
 
 async function archiveEmails(accessToken: string, emailIds: string[]): Promise<{ success: boolean; archivedCount: number }> {
-  const results = await Promise.all(
-    emailIds.map(async (id) => {
-      const response = await fetch(
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}/modify`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ removeLabelIds: ['INBOX'] }),
-        }
-      );
-      return response.ok;
-    })
+  const response = await fetch(
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages/batchModify`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        ids: emailIds,
+        removeLabelIds: ['INBOX']
+      }),
+    }
   );
 
-  const archivedCount = results.filter(Boolean).length;
-  return { success: archivedCount === emailIds.length, archivedCount };
+  if (!response.ok) {
+    const error = await response.text();
+    console.error('Batch archive error:', error);
+    return { success: false, archivedCount: 0 };
+  }
+
+  return { success: true, archivedCount: emailIds.length };
 }
 
 async function markAsRead(accessToken: string, emailIds: string[]): Promise<{ success: boolean; markedCount: number }> {
-  const results = await Promise.all(
-    emailIds.map(async (id) => {
-      const response = await fetch(
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}/modify`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ removeLabelIds: ['UNREAD'] }),
-        }
-      );
-      return response.ok;
-    })
+  const response = await fetch(
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages/batchModify`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        ids: emailIds,
+        removeLabelIds: ['UNREAD']
+      }),
+    }
   );
 
-  const markedCount = results.filter(Boolean).length;
-  return { success: markedCount === emailIds.length, markedCount };
+  if (!response.ok) {
+    const error = await response.text();
+    console.error('Batch markRead error:', error);
+    return { success: false, markedCount: 0 };
+  }
+
+  return { success: true, markedCount: emailIds.length };
 }
 
 async function getStats(accessToken: string): Promise<{

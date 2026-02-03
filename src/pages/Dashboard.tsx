@@ -19,7 +19,7 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user, signOut } = useAuth();
-  const { emails, stats, loading, loadingMore, error, hasMore, fetchEmails, loadMoreEmails, fetchStats, trashEmails, archiveEmails, markAsRead } = useGmailApi();
+  const { emails, stats, loading, loadingMore, error, hasMore, fetchEmails, loadMoreEmails, loadAllEmails, fetchStats, trashEmails, archiveEmails, markAsRead } = useGmailApi();
 
   const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
   const [selectedEmails, setSelectedEmails] = useState<string[]>([]);
@@ -264,6 +264,18 @@ const Dashboard = () => {
           </div>
 
           <div className="flex items-center gap-2">
+            {activeTab === "emails" && hasMore && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => loadAllEmails(currentQuery())}
+                disabled={loading || loadingMore}
+                className="hidden sm:flex items-center gap-2 mr-2"
+              >
+                <RefreshCw className={`h-3 w-3 ${loadingMore ? 'animate-spin' : ''}`} />
+                {loadingMore ? 'Loading All...' : 'Load All'}
+              </Button>
+            )}
             <Button variant="ghost" size="icon" onClick={handleRefresh} disabled={loading}>
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             </Button>
@@ -362,6 +374,20 @@ const Dashboard = () => {
 
             {/* Email List */}
             <div className="flex-1 space-y-4">
+              {/* Mobile Load All Button */}
+              <div className="md:hidden flex justify-end">
+                {hasMore && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => loadAllEmails(currentQuery())}
+                    disabled={loading || loadingMore}
+                    className="w-full"
+                  >
+                    {loadingMore ? 'Loading All...' : 'Load All Emails'}
+                  </Button>
+                )}
+              </div>
               <BulkActionBar
                 selectedCount={selectedEmails.length}
                 onClearSelection={() => setSelectedEmails([])}
@@ -377,6 +403,7 @@ const Dashboard = () => {
                 loadingMore={loadingMore}
                 hasMore={hasMore}
                 onLoadMore={() => loadMoreEmails(currentQuery())}
+                onLoadAll={() => loadAllEmails(currentQuery())}
               />
             </div>
           </div>

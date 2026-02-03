@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Paperclip, Star, Loader2 } from "lucide-react";
 import type { Email } from "@/hooks/useGmailApi";
 
@@ -24,6 +25,7 @@ interface EmailListProps {
   loadingMore?: boolean;
   hasMore?: boolean;
   onLoadMore?: () => void;
+  onLoadAll?: () => void;
 }
 
 const EmailList = ({
@@ -34,6 +36,7 @@ const EmailList = ({
   loadingMore,
   hasMore,
   onLoadMore,
+  onLoadAll,
 }: EmailListProps) => {
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
@@ -112,11 +115,11 @@ const EmailList = ({
           onCheckedChange={toggleAll}
         />
         <div className="flex-1 grid grid-cols-12 gap-4 text-sm font-medium text-muted-foreground">
-          <div className="col-span-3">Sender</div>
-          <div className="col-span-5">Subject</div>
-          <div className="col-span-2">Category</div>
-          <div className="col-span-1 text-right">Size</div>
-          <div className="col-span-1 text-right">Date</div>
+          <div className="col-span-4 md:col-span-3">Sender</div>
+          <div className="col-span-6 md:col-span-5">Subject</div>
+          <div className="hidden md:block md:col-span-2">Category</div>
+          <div className="hidden md:block md:col-span-1 text-right">Size</div>
+          <div className="col-span-2 md:col-span-1 text-right">Date</div>
         </div>
       </div>
 
@@ -125,9 +128,8 @@ const EmailList = ({
         {emails.map((email) => (
           <div
             key={email.id}
-            className={`flex items-center gap-4 px-4 py-3 hover:bg-background transition-colors cursor-pointer ${
-              !email.isRead ? "bg-primary/5" : ""
-            }`}
+            className={`flex items-center gap-4 px-4 py-3 hover:bg-background transition-colors cursor-pointer ${!email.isRead ? "bg-primary/5" : ""
+              }`}
             onClick={() => toggleEmail(email.id)}
           >
             <Checkbox
@@ -136,7 +138,7 @@ const EmailList = ({
               onClick={(e) => e.stopPropagation()}
             />
             <div className="flex-1 grid grid-cols-12 gap-4 items-center">
-              <div className="col-span-3 flex items-center gap-2">
+              <div className="col-span-4 md:col-span-3 flex items-center gap-2">
                 <div className="flex-1 min-w-0">
                   <p className={`text-sm truncate ${!email.isRead ? "font-semibold text-foreground" : "text-foreground"}`}>
                     {email.sender}
@@ -147,7 +149,7 @@ const EmailList = ({
                 </div>
                 {email.isStarred && <Star className="h-4 w-4 text-warning fill-warning flex-shrink-0" />}
               </div>
-              <div className="col-span-5 min-w-0">
+              <div className="col-span-6 md:col-span-5 min-w-0">
                 <div className="flex items-center gap-2">
                   {email.hasAttachment && <Paperclip className="h-4 w-4 text-muted-foreground flex-shrink-0" />}
                   <p className={`text-sm truncate ${!email.isRead ? "font-semibold text-foreground" : "text-foreground"}`}>
@@ -158,15 +160,15 @@ const EmailList = ({
                   {email.preview}
                 </p>
               </div>
-              <div className="col-span-2">
+              <div className="hidden md:block md:col-span-2">
                 <Badge variant="secondary" className={categoryColors[email.category] || "bg-secondary text-secondary-foreground"}>
                   {email.category}
                 </Badge>
               </div>
-              <div className="col-span-1 text-right text-sm text-muted-foreground">
+              <div className="hidden md:block md:col-span-1 text-right text-sm text-muted-foreground">
                 {email.size}
               </div>
-              <div className="col-span-1 text-right text-sm text-muted-foreground">
+              <div className="col-span-2 md:col-span-1 text-right text-sm text-muted-foreground">
                 {email.date}
               </div>
             </div>
@@ -176,7 +178,7 @@ const EmailList = ({
 
       {/* Load More Trigger */}
       <div ref={loadMoreRef} className="h-1" />
-      
+
       {/* Loading More Indicator */}
       {loadingMore && (
         <div className="flex items-center justify-center py-4 border-t border-border">
@@ -184,11 +186,20 @@ const EmailList = ({
           <span className="text-sm text-muted-foreground">Loading more emails...</span>
         </div>
       )}
-      
+
       {/* End of List */}
       {!hasMore && emails.length > 0 && (
         <div className="text-center py-4 border-t border-border">
           <span className="text-sm text-muted-foreground">No more emails to load</span>
+        </div>
+      )}
+
+      {/* Load All Button - Show when we have more and are not loading */}
+      {hasMore && !loading && !loadingMore && onLoadAll && (
+        <div className="flex justify-center py-4 border-t border-border">
+          <Button variant="outline" size="sm" onClick={onLoadAll}>
+            Load All Emails
+          </Button>
         </div>
       )}
     </div>

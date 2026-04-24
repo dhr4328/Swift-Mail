@@ -14,11 +14,10 @@ import {
 interface QuickInsightsProps {
   stats: GmailStats | null;
   emailCount: number;
-  attachmentCount: number;
   onApplyFilter: (filterId: string) => void;
 }
 
-const QuickInsights = ({ stats, emailCount, attachmentCount, onApplyFilter }: QuickInsightsProps) => {
+const QuickInsights = ({ stats, emailCount, onApplyFilter }: QuickInsightsProps) => {
   if (!stats) return null;
 
   const insights = [
@@ -61,7 +60,7 @@ const QuickInsights = ({ stats, emailCount, attachmentCount, onApplyFilter }: Qu
     {
       icon: Paperclip,
       label: "Attachments",
-      value: attachmentCount.toLocaleString(),
+      value: stats.attachments?.toLocaleString() ?? "—",
       sub: "emails with files",
       filterId: "attachments",
       accent: "text-rose-500",
@@ -69,10 +68,10 @@ const QuickInsights = ({ stats, emailCount, attachmentCount, onApplyFilter }: Qu
     },
     {
       icon: Clock,
-      label: "Older than 1yr",
-      value: "—",
-      sub: "potential clutter",
-      filterId: "1year",
+      label: "Unread",
+      value: stats.unread?.toLocaleString() ?? "—",
+      sub: "need your attention",
+      filterId: "unread",
       accent: "text-slate-500",
       bg: "bg-slate-500/10",
     },

@@ -246,6 +246,7 @@ async function markAsRead(accessToken: string, emailIds: string[]): Promise<{ su
 async function getStats(accessToken: string): Promise<{
   totalEmails: number;
   unread: number;
+  attachments: number;
   categories: {
     promotions: number;
     social: number;
@@ -255,12 +256,10 @@ async function getStats(accessToken: string): Promise<{
   };
   storageUsed?: string;
 }> {
-  // Get profile for total counts
+  // Get profile for total message count (this is accurate)
   const profileResponse = await fetch(
     'https://gmail.googleapis.com/gmail/v1/users/me/profile',
-    {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    }
+    { headers: { Authorization: `Bearer ${accessToken}` } }
   );
 
   let totalEmails = 0;
@@ -269,13 +268,29 @@ async function getStats(accessToken: string): Promise<{
     totalEmails = profile.messagesTotal || 0;
   }
 
-  // Helper to get count for a label
-  const getLabelCount = async (labelId: string): Promise<number> => {
+  // Use the Labels API — returns exact messagesTotal & messagesUnread per label
+  // This is far more accurate than resultSizeEstimate from the messages list endpoint.
+  const getLabelInfo = async (labelId: string): Promise<{ total: number; unread: number }> => {
     const response = await fetch(
-      `https://gmail.googleapis.com/gmail/v1/users/me/messages?labelIds=${labelId}&maxResults=1`,
-      {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      }
+      `https://gmail.googleapis.com/gmail/v1/users/me/labels/${labelId}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    if (response.ok) {
+      const data = await response.json();
+      return {
+        total: data.messagesTotal || 0,
+        unread: data.messagesUnread || 0,
+      };
+    }
+    return { total: 0, unread: 0 };
+  };
+
+  // For attachments, query the messages list with has:attachment — resultSizeEstimate
+  // is still an approximation here, but it's the only way without fetching all messages.
+  const getAttachmentCount = async (): Promise<number> => {
+    const response = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=has%3Aattachment&maxResults=1`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
     );
     if (response.ok) {
       const data = await response.json();
@@ -284,32 +299,41 @@ async function getStats(accessToken: string): Promise<{
     return 0;
   };
 
-  const [unread, promotions, social, updates, forums] = await Promise.all([
-    getLabelCount('UNREAD'),
-    getLabelCount('CATEGORY_PROMOTIONS'),
-    getLabelCount('CATEGORY_SOCIAL'),
-    getLabelCount('CATEGORY_UPDATES'),
-    getLabelCount('CATEGORY_FORUMS'),
+  const [
+    inboxLabel,
+    promotionsLabel,
+    socialLabel,
+    updatesLabel,
+    forumsLabel,
+    personalLabel,
+    attachments,
+  ] = await Promise.all([
+    getLabelInfo('INBOX'),
+    getLabelInfo('CATEGORY_PROMOTIONS'),
+    getLabelInfo('CATEGORY_SOCIAL'),
+    getLabelInfo('CATEGORY_UPDATES'),
+    getLabelInfo('CATEGORY_FORUMS'),
+    getLabelInfo('CATEGORY_PERSONAL'),
+    getAttachmentCount(),
   ]);
 
-  // Personal is usually what's left, or we can approximate it. 
-  // Since we can't easily query "Excluding all other categories", we'll infer it or just leave it for now.
-  // A simple approximation for Personal is Total - (Promotions + Social + Updates + Forums).
-  // Note: resultSizeEstimate is an estimate, so this might be negative effectively, so we clamp it.
-  const personal = Math.max(0, totalEmails - (promotions + social + updates + forums));
+  // Use INBOX label's unread count as it's the most relevant
+  const unread = inboxLabel.unread;
 
   return {
     totalEmails,
     unread,
+    attachments,
     categories: {
-      promotions,
-      social,
-      updates,
-      forums,
-      personal
-    }
+      promotions: promotionsLabel.total,
+      social: socialLabel.total,
+      updates: updatesLabel.total,
+      forums: forumsLabel.total,
+      personal: personalLabel.total,
+    },
   };
 }
+
 
 Deno.serve(async (req) => {
   // Handle CORS preflight

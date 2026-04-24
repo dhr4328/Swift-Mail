@@ -19,6 +19,7 @@ export interface Email {
 export interface GmailStats {
   totalEmails: number;
   unread: number;
+  attachments: number;
   categories: {
     promotions: number;
     social: number;

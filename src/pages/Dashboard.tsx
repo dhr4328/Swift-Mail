@@ -340,7 +340,7 @@ const Dashboard = () => {
               />
               <StatCard
                 title="With Attachments"
-                value={emails.filter(e => e.hasAttachment).length.toString()}
+                value={(stats?.attachments ?? emails.filter(e => e.hasAttachment).length).toLocaleString()}
                 icon={Paperclip}
                 description="Files in emails"
               />
@@ -366,7 +366,6 @@ const Dashboard = () => {
               <QuickInsights
                 stats={stats}
                 emailCount={emails.length}
-                attachmentCount={emails.filter(e => e.hasAttachment).length}
                 onApplyFilter={handleSuggestionClick}
               />
             </div>

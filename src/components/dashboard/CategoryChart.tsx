@@ -1,12 +1,12 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 
-const chartColors = [
-  "hsl(var(--chart-1))",
-  "hsl(var(--chart-2))",
-  "hsl(var(--chart-3))",
-  "hsl(var(--chart-4))",
-  "hsl(var(--chart-5))",
+const COLORS = [
+  { bg: "hsl(var(--chart-1))", light: "hsl(var(--chart-1) / 0.15)" },
+  { bg: "hsl(var(--chart-2))", light: "hsl(var(--chart-2) / 0.15)" },
+  { bg: "hsl(var(--chart-3))", light: "hsl(var(--chart-3) / 0.15)" },
+  { bg: "hsl(var(--chart-4))", light: "hsl(var(--chart-4) / 0.15)" },
+  { bg: "hsl(var(--chart-5))", light: "hsl(var(--chart-5) / 0.15)" },
 ];
 
 interface CategoryChartProps {
@@ -19,37 +19,45 @@ interface CategoryChartProps {
   } | Record<string, number>;
 }
 
+const CustomTooltip = ({ active, payload }: any) => {
+  if (active && payload && payload.length) {
+    const d = payload[0].payload;
+    return (
+      <div className="bg-card border border-border rounded-lg px-3 py-2 shadow-lg text-sm">
+        <p className="font-semibold text-foreground">{d.name}</p>
+        <p className="text-muted-foreground">{d.value.toLocaleString()} emails</p>
+        <p className="text-muted-foreground">{d.pct}% of inbox</p>
+      </div>
+    );
+  }
+  return null;
+};
+
 const CategoryChart = ({ categoryCounts }: CategoryChartProps) => {
-  let data: { name: string; value: number; color: string }[] = [];
+  let rawData: { name: string; value: number }[] = [];
 
   if (categoryCounts) {
-    // Check if it's the specific structure we expect from backend
-    if ('promotions' in categoryCounts && typeof categoryCounts.promotions === 'number') {
-      const stats = categoryCounts as {
-        promotions: number;
-        social: number;
-        updates: number;
-        forums: number;
-        personal: number;
-      };
-      data = [
-        { name: "Personal", value: stats.personal, color: chartColors[0] },
-        { name: "Promotions", value: stats.promotions, color: chartColors[1] },
-        { name: "Social", value: stats.social, color: chartColors[2] },
-        { name: "Updates", value: stats.updates, color: chartColors[3] },
-        { name: "Forums", value: stats.forums, color: chartColors[4] },
-      ].filter(item => item.value > 0);
+    if ("promotions" in categoryCounts && typeof categoryCounts.promotions === "number") {
+      const s = categoryCounts as any;
+      rawData = [
+        { name: "Personal", value: s.personal },
+        { name: "Promotions", value: s.promotions },
+        { name: "Social", value: s.social },
+        { name: "Updates", value: s.updates },
+        { name: "Forums", value: s.forums },
+      ].filter((d) => d.value > 0);
     } else {
-      // Fallback for the old Record<string, number> if used elsewhere
-      data = Object.entries(categoryCounts).map(([name, value], index) => ({
-        name,
-        value,
-        color: chartColors[index % chartColors.length],
-      }));
+      rawData = Object.entries(categoryCounts)
+        .map(([name, value]) => ({ name, value }))
+        .filter((d) => d.value > 0);
     }
   }
 
-  // If no data, show a placeholder or empty state
+  const total = rawData.reduce((s, d) => s + d.value, 0);
+  const data = rawData
+    .map((d) => ({ ...d, pct: total > 0 ? Math.round((d.value / total) * 100) : 0 }))
+    .sort((a, b) => b.value - a.value);
+
   if (data.length === 0) {
     return (
       <Card className="bg-card border-border">
@@ -65,43 +73,65 @@ const CategoryChart = ({ categoryCounts }: CategoryChartProps) => {
 
   return (
     <Card className="bg-card border-border">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-lg font-semibold">Email Categories</CardTitle>
+      <CardHeader className="pb-4">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-lg font-semibold">Email Categories</CardTitle>
+          <span className="text-sm text-muted-foreground">{total.toLocaleString()} total</span>
+        </div>
       </CardHeader>
-      <CardContent>
-        <div className="h-64">
+      <CardContent className="space-y-5">
+        {/* Horizontal Bar Chart */}
+        <div className="h-48">
           <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={data}
-                cx="50%"
-                cy="50%"
-                innerRadius={60}
-                outerRadius={80}
-                paddingAngle={2}
-                dataKey="value"
-              >
-                {data.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
+            <BarChart
+              data={data}
+              layout="vertical"
+              margin={{ top: 0, right: 16, left: 0, bottom: 0 }}
+              barCategoryGap="30%"
+            >
+              <XAxis
+                type="number"
+                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v))}
+              />
+              <YAxis
+                type="category"
+                dataKey="name"
+                tick={{ fontSize: 12, fill: "hsl(var(--foreground))" }}
+                tickLine={false}
+                axisLine={false}
+                width={80}
+              />
+              <Tooltip content={<CustomTooltip />} cursor={{ fill: "hsl(var(--muted) / 0.3)" }} />
+              <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                {data.map((_, index) => (
+                  <Cell key={index} fill={COLORS[index % COLORS.length].bg} />
                 ))}
-              </Pie>
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: "hsl(var(--card))",
-                  border: "1px solid hsl(var(--border))",
-                  borderRadius: "0",
-                }}
-                itemStyle={{ color: "hsl(var(--foreground))" }}
-              />
-              <Legend
-                verticalAlign="bottom"
-                height={36}
-                formatter={(value) => (
-                  <span className="text-sm text-muted-foreground">{value}</span>
-                )}
-              />
-            </PieChart>
+              </Bar>
+            </BarChart>
           </ResponsiveContainer>
+        </div>
+
+        {/* Category pills with percentage */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
+          {data.map((item, index) => (
+            <div
+              key={item.name}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg"
+              style={{ backgroundColor: COLORS[index % COLORS.length].light }}
+            >
+              <div
+                className="w-2 h-2 rounded-full flex-shrink-0"
+                style={{ backgroundColor: COLORS[index % COLORS.length].bg }}
+              />
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-foreground truncate">{item.name}</p>
+                <p className="text-xs text-muted-foreground">{item.pct}%</p>
+              </div>
+            </div>
+          ))}
         </div>
       </CardContent>
     </Card>

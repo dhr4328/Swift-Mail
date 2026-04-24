@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Mail, Inbox, AlertTriangle, HardDrive, LogOut, Search, Menu, RefreshCw } from "lucide-react";
+import { Mail, Inbox, Users, Paperclip, HardDrive, LogOut, Search, Menu, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
@@ -9,7 +9,8 @@ import { useGmailApi } from "@/hooks/useGmailApi";
 import StatCard from "@/components/dashboard/StatCard";
 import CategoryChart from "@/components/dashboard/CategoryChart";
 import StorageChart from "@/components/dashboard/StorageChart";
-import CleaningSuggestions from "@/components/dashboard/CleaningSuggestions";
+import InboxHealthCard from "@/components/dashboard/InboxHealthCard";
+import QuickInsights from "@/components/dashboard/QuickInsights";
 import FilterSidebar from "@/components/dashboard/FilterSidebar";
 import EmailList from "@/components/dashboard/EmailList";
 import BulkActionBar from "@/components/dashboard/BulkActionBar";
@@ -53,11 +54,12 @@ const Dashboard = () => {
 
     const categoryMap: Record<string, string> = {
       personal: "category:personal",
-      work: "category:primary", // Work often falls into primary if not labeled otherwise, or we can use labels
+      work: "category:primary",
       promotions: "category:promotions",
-      newsletters: "category:updates", // Updates is closest to newsletters
+      newsletters: "category:updates",
       social: "category:social",
-      finance: "category:updates", // Finance often in updates
+      forums: "category:forums",
+      finance: "category:updates",
       spam: "in:spam",
     };
 
@@ -331,16 +333,16 @@ const Dashboard = () => {
                 description="In your inbox"
               />
               <StatCard
-                title="Promotions"
-                value={stats?.categories.promotions.toLocaleString() || categoryCounts['Promotions']?.toString() || "0"}
-                icon={Mail}
-                description={`${stats?.categories.promotions ? Math.round((stats.categories.promotions / (stats.totalEmails || 1)) * 100) : 0}% of inbox`}
+                title="Social"
+                value={stats?.categories.social?.toLocaleString() || categoryCounts['Social']?.toString() || "0"}
+                icon={Users}
+                description={`${stats?.categories.social ? Math.round((stats.categories.social / (stats.totalEmails || 1)) * 100) : 0}% of inbox`}
               />
               <StatCard
-                title="Unread"
-                value={stats?.unread?.toLocaleString() || emails.filter(e => !e.isRead).length.toString()}
-                icon={AlertTriangle}
-                description="Needs attention"
+                title="With Attachments"
+                value={emails.filter(e => e.hasAttachment).length.toString()}
+                icon={Paperclip}
+                description="Files in emails"
               />
               {stats?.storageUsed && (
                 <StatCard
@@ -358,8 +360,16 @@ const Dashboard = () => {
               {stats?.storageUsed && <StorageChart />}
             </div>
 
-            {/* Cleaning Suggestions */}
-            <CleaningSuggestions stats={stats} onApplyFilter={handleSuggestionClick} />
+            {/* Inbox Health + Quick Insights */}
+            <div className="grid lg:grid-cols-2 gap-6">
+              <InboxHealthCard stats={stats} />
+              <QuickInsights
+                stats={stats}
+                emailCount={emails.length}
+                attachmentCount={emails.filter(e => e.hasAttachment).length}
+                onApplyFilter={handleSuggestionClick}
+              />
+            </div>
           </div>
         ) : (
           <div className="flex gap-6">

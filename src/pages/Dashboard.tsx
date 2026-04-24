@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Mail, Inbox, Users, Paperclip, HardDrive, LogOut, Search, Menu, RefreshCw } from "lucide-react";
+import { Mail, Inbox, Users, HardDrive, LogOut, Search, Menu, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
@@ -325,7 +325,7 @@ const Dashboard = () => {
         {activeTab === "overview" ? (
           <div className="space-y-6">
             {/* Stats Grid */}
-            <div className={`grid sm:grid-cols-2 ${stats?.storageUsed ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-4`}>
+            <div className={`grid sm:grid-cols-2 ${stats?.storageUsed ? 'lg:grid-cols-3' : 'lg:grid-cols-2'} gap-4`}>
               <StatCard
                 title="Total Emails"
                 value={stats?.totalEmails?.toLocaleString() || emails.length.toString()}
@@ -337,12 +337,6 @@ const Dashboard = () => {
                 value={stats?.categories.social?.toLocaleString() || categoryCounts['Social']?.toString() || "0"}
                 icon={Users}
                 description={`${stats?.categories.social ? Math.round((stats.categories.social / (stats.totalEmails || 1)) * 100) : 0}% of inbox`}
-              />
-              <StatCard
-                title="With Attachments"
-                value={(stats?.attachments ?? emails.filter(e => e.hasAttachment).length).toLocaleString()}
-                icon={Paperclip}
-                description="Files in emails"
               />
               {stats?.storageUsed && (
                 <StatCard

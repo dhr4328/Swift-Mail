@@ -167,31 +167,125 @@ async function fetchEmails(accessToken: string, maxResults: number = 50, pageTok
 }
 
 async function trashEmails(accessToken: string, emailIds: string[]): Promise<{ success: boolean; trashedCount: number }> {
-  // Frontend handles chunking now, so we can process what we get directly.
-  // max supported by Gmail is 1000. Frontend sends 50.
-  const response = await fetch(
-    `https://gmail.googleapis.com/gmail/v1/users/me/messages/batchModify`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        ids: emailIds,
-        addLabelIds: ['TRASH']
-      }),
-    }
-  );
+  // Gmail's batchModify with TRASH label doesn't reliably move emails to Trash.
+  // The correct API is messages.trash which properly moves the message to Trash
+  // and removes it from all other labels including INBOX.
+  let trashedCount = 0;
+  const errors: string[] = [];
 
-  if (!response.ok) {
-    const error = await response.text();
-    console.error('Batch trash error:', error);
-    return { success: false, trashedCount: 0 };
+  // Process in parallel batches of 10 to avoid rate limits
+  const PARALLEL_SIZE = 10;
+  for (let i = 0; i < emailIds.length; i += PARALLEL_SIZE) {
+    const batch = emailIds.slice(i, i + PARALLEL_SIZE);
+    const results = await Promise.allSettled(
+      batch.map(async (id) => {
+        const res = await fetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}/trash`,
+          {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${accessToken}` },
+          }
+        );
+        if (!res.ok) {
+          const err = await res.text();
+          throw new Error(`Failed to trash ${id}: ${err}`);
+        }
+        return id;
+      })
+    );
+
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        trashedCount++;
+      } else {
+        errors.push(result.reason?.message || 'Unknown error');
+      }
+    }
   }
 
-  return { success: true, trashedCount: emailIds.length };
+  if (errors.length > 0) {
+    console.error('Some emails failed to trash:', errors);
+  }
+
+  return { success: errors.length === 0, trashedCount };
 }
+
+// Fetches ALL message IDs matching a query (paginates automatically),
+// then trashes every single one. No email left behind.
+async function trashAllByQuery(
+  accessToken: string,
+  q: string
+): Promise<{ success: boolean; trashedCount: number; totalFound: number }> {
+  // --- Phase 1: Collect all matching message IDs via pagination ---
+  const allIds: string[] = [];
+  let pageToken: string | undefined = undefined;
+
+  do {
+    let url = `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=500&fields=messages/id,nextPageToken`;
+    if (q) url += `&q=${encodeURIComponent(q)}`;
+    if (pageToken) url += `&pageToken=${encodeURIComponent(pageToken)}`;
+
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Failed to list messages: ${err}`);
+    }
+
+    const data = await res.json();
+    const messages: { id: string }[] = data.messages || [];
+    allIds.push(...messages.map((m) => m.id));
+    pageToken = data.nextPageToken;
+  } while (pageToken);
+
+  const totalFound = allIds.length;
+
+  if (totalFound === 0) {
+    return { success: true, trashedCount: 0, totalFound: 0 };
+  }
+
+  // --- Phase 2: Trash all collected IDs in parallel batches of 10 ---
+  let trashedCount = 0;
+  const errors: string[] = [];
+  const PARALLEL_SIZE = 10;
+
+  for (let i = 0; i < allIds.length; i += PARALLEL_SIZE) {
+    const batch = allIds.slice(i, i + PARALLEL_SIZE);
+    const results = await Promise.allSettled(
+      batch.map(async (id) => {
+        const res = await fetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}/trash`,
+          {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${accessToken}` },
+          }
+        );
+        if (!res.ok) {
+          const err = await res.text();
+          throw new Error(`Failed to trash ${id}: ${err}`);
+        }
+        return id;
+      })
+    );
+
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        trashedCount++;
+      } else {
+        errors.push(result.reason?.message || 'Unknown error');
+      }
+    }
+  }
+
+  if (errors.length > 0) {
+    console.error(`trashAllByQuery: ${errors.length} failures`, errors.slice(0, 5));
+  }
+
+  return { success: errors.length === 0, trashedCount, totalFound };
+}
+
 
 async function archiveEmails(accessToken: string, emailIds: string[]): Promise<{ success: boolean; archivedCount: number }> {
   const response = await fetch(
@@ -427,6 +521,18 @@ Deno.serve(async (req) => {
           );
         }
         result = await markAsRead(googleAccessToken, emailIds);
+        break;
+      }
+      case 'trashAll': {
+        const body = await req.json();
+        const q = body.q as string;
+        if (!q || typeof q !== 'string') {
+          return new Response(
+            JSON.stringify({ error: 'q (query string) is required for trashAll' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        result = await trashAllByQuery(googleAccessToken, q);
         break;
       }
       case 'stats': {

@@ -20,7 +20,7 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user, signOut } = useAuth();
-  const { emails, stats, loading, loadingMore, error, hasMore, fetchEmails, loadMoreEmails, loadAllEmails, fetchStats, trashEmails, archiveEmails, markAsRead } = useGmailApi();
+  const { emails, stats, loading, loadingMore, deleting, error, hasMore, fetchEmails, loadMoreEmails, loadAllEmails, fetchStats, trashEmails, trashAllByQuery, archiveEmails, markAsRead } = useGmailApi();
 
   const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
   const [selectedEmails, setSelectedEmails] = useState<string[]>([]);
@@ -164,6 +164,9 @@ const Dashboard = () => {
         description: `${result.trashedCount} email(s) moved to trash.`,
       });
       setSelectedEmails([]);
+      // Refresh list from server so next page of filtered emails loads in
+      // and trashed emails are fully gone even if optimistic removal missed some
+      fetchEmails(50, true, currentQuery() || undefined).catch(console.error);
     } catch (err) {
       toast({
         title: "Error",
@@ -183,6 +186,7 @@ const Dashboard = () => {
         description: `${result.archivedCount} email(s) archived successfully.`,
       });
       setSelectedEmails([]);
+      fetchEmails(50, true, currentQuery() || undefined).catch(console.error);
     } catch (err) {
       toast({
         title: "Error",
@@ -202,10 +206,35 @@ const Dashboard = () => {
         description: `${result.markedCount} email(s) marked as read.`,
       });
       setSelectedEmails([]);
+      fetchEmails(50, true, currentQuery() || undefined).catch(console.error);
     } catch (err) {
       toast({
         title: "Error",
         description: "Failed to mark emails as read.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDeleteAll = async () => {
+    const q = currentQuery();
+    if (!q) return;
+    const confirmed = window.confirm(
+      `This will permanently move ALL emails matching the current filter to Trash. Continue?`
+    );
+    if (!confirmed) return;
+
+    try {
+      const result = await trashAllByQuery(q);
+      toast({
+        title: "Done",
+        description: `${result.trashedCount.toLocaleString()} email(s) moved to trash.`,
+      });
+      setSelectedEmails([]);
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: "Failed to delete all emails. Please try again.",
         variant: "destructive",
       });
     }
@@ -393,8 +422,14 @@ const Dashboard = () => {
               </div>
               <BulkActionBar
                 selectedCount={selectedEmails.length}
+                hasActiveFilter={selectedFilters.length > 0 || !!searchQuery}
+                totalMatchingCount={stats?.categories
+                  ? undefined  // could wire a count here later
+                  : undefined}
+                deleting={deleting}
                 onClearSelection={() => setSelectedEmails([])}
                 onDelete={handleDelete}
+                onDeleteAll={handleDeleteAll}
                 onArchive={handleArchive}
                 onMarkRead={handleMarkRead}
               />

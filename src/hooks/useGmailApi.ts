@@ -321,11 +321,49 @@ export const useGmailApi = () => {
     }
   }, [getAuthHeaders]);
 
+  const [deleting, setDeleting] = useState(false);
+
+  const trashAllByQuery = useCallback(async (query: string) => {
+    setError(null);
+    setDeleting(true);
+    try {
+      const headers = await getAuthHeaders();
+      const response = await fetch(`${FUNCTION_URL}?action=trashAll`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ q: query }),
+      });
+
+      if (response.status === 401) {
+        window.location.href = "/";
+        throw new Error("Unauthorized");
+      }
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to delete all emails");
+      }
+
+      const data = await response.json();
+      // Clear local list immediately — server has trashed everything
+      setEmails([]);
+      setHasMore(false);
+      nextPageTokenRef.current = null;
+      return data as { success: boolean; trashedCount: number; totalFound: number };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to delete all emails";
+      setError(message);
+      throw err;
+    } finally {
+      setDeleting(false);
+    }
+  }, [getAuthHeaders]);
+
   return {
     emails,
     stats,
     loading,
     loadingMore,
+    deleting,
     error,
     hasMore,
     fetchEmails,
@@ -333,6 +371,7 @@ export const useGmailApi = () => {
     loadAllEmails,
     fetchStats,
     trashEmails,
+    trashAllByQuery,
     archiveEmails,
     markAsRead,
   };

@@ -113,18 +113,20 @@ const Dashboard = () => {
   // ... inside render ...
 
 
-  // Fetch emails when filters or search query changes
+  // Fetch ALL emails when filters or search query changes
   useEffect(() => {
     const filterQuery = buildGmailQuery(selectedFilters);
     // Combine filter query with search bar query if both exist
-    let finalQuery = filterQuery;
+    let finalQuery = filterQuery || undefined;
     if (searchQuery) {
       finalQuery = finalQuery ? `${finalQuery} ${searchQuery}` : searchQuery;
     }
 
-    // Debounce could be added here if needed, but for now direct call
-    fetchEmails(50, true, finalQuery).catch(console.error);
-  }, [fetchEmails, selectedFilters, searchQuery]); // Added searchQuery to dependency to trigger server-side search
+    // Load the first page immediately, then auto-load the rest
+    fetchEmails(50, true, finalQuery)
+      .then(() => loadAllEmails(finalQuery))
+      .catch(console.error);
+  }, [fetchEmails, loadAllEmails, selectedFilters, searchQuery]);
 
   const handleRefresh = async () => {
     try {
@@ -295,18 +297,6 @@ const Dashboard = () => {
           </div>
 
           <div className="flex items-center gap-2">
-            {activeTab === "emails" && hasMore && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => loadAllEmails(currentQuery())}
-                disabled={loading || loadingMore}
-                className="hidden sm:flex items-center gap-2 mr-2"
-              >
-                <RefreshCw className={`h-3 w-3 ${loadingMore ? 'animate-spin' : ''}`} />
-                {loadingMore ? 'Loading All...' : 'Load All'}
-              </Button>
-            )}
             <Button variant="ghost" size="icon" onClick={handleRefresh} disabled={loading}>
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             </Button>
@@ -406,20 +396,6 @@ const Dashboard = () => {
 
             {/* Email List */}
             <div className="flex-1 space-y-4">
-              {/* Mobile Load All Button */}
-              <div className="md:hidden flex justify-end">
-                {hasMore && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => loadAllEmails(currentQuery())}
-                    disabled={loading || loadingMore}
-                    className="w-full"
-                  >
-                    {loadingMore ? 'Loading All...' : 'Load All Emails'}
-                  </Button>
-                )}
-              </div>
               <BulkActionBar
                 selectedCount={selectedEmails.length}
                 hasActiveFilter={selectedFilters.length > 0 || !!searchQuery}
@@ -441,7 +417,6 @@ const Dashboard = () => {
                 loadingMore={loadingMore}
                 hasMore={hasMore}
                 onLoadMore={() => loadMoreEmails(currentQuery())}
-                onLoadAll={() => loadAllEmails(currentQuery())}
               />
             </div>
           </div>

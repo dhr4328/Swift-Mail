@@ -25,7 +25,6 @@ interface EmailListProps {
   loadingMore?: boolean;
   hasMore?: boolean;
   onLoadMore?: () => void;
-  onLoadAll?: () => void;
 }
 
 const EmailList = ({
@@ -36,7 +35,6 @@ const EmailList = ({
   loadingMore,
   hasMore,
   onLoadMore,
-  onLoadAll,
 }: EmailListProps) => {
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
@@ -194,14 +192,6 @@ const EmailList = ({
         </div>
       )}
 
-      {/* Load All Button - Show when we have more and are not loading */}
-      {hasMore && !loading && !loadingMore && onLoadAll && (
-        <div className="flex justify-center py-4 border-t border-border">
-          <Button variant="outline" size="sm" onClick={onLoadAll}>
-            Load All Emails
-          </Button>
-        </div>
-      )}
     </div>
   );
 };

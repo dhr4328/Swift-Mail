@@ -403,6 +403,7 @@ const Dashboard = () => {
                   ? undefined  // could wire a count here later
                   : undefined}
                 deleting={deleting}
+                isBuffering={loading || loadingMore}
                 onClearSelection={() => setSelectedEmails([])}
                 onDelete={handleDelete}
                 onDeleteAll={handleDeleteAll}
@@ -417,6 +418,7 @@ const Dashboard = () => {
                 loadingMore={loadingMore}
                 hasMore={hasMore}
                 onLoadMore={() => loadMoreEmails(currentQuery())}
+                isBuffering={loading || loadingMore}
               />
             </div>
           </div>

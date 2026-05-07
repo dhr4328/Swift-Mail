@@ -3,9 +3,10 @@ import { Button } from "@/components/ui/button";
 
 interface BulkActionBarProps {
   selectedCount: number;
-  totalMatchingCount?: number; // total on server for active filter
+  totalMatchingCount?: number;
   hasActiveFilter: boolean;
   deleting?: boolean;
+  isBuffering?: boolean; // true while all pages are still loading
   onClearSelection: () => void;
   onDelete: () => void;
   onDeleteAll: () => void;
@@ -18,12 +19,26 @@ const BulkActionBar = ({
   totalMatchingCount,
   hasActiveFilter,
   deleting,
+  isBuffering,
   onClearSelection,
   onDelete,
   onDeleteAll,
   onArchive,
   onMarkRead,
 }: BulkActionBarProps) => {
+  // While loading all pages, show a persistent buffering banner
+  if (isBuffering) {
+    return (
+      <div className="flex items-center gap-3 px-4 py-3 bg-muted/60 border border-border rounded-lg">
+        <Loader2 className="h-4 w-4 animate-spin text-primary flex-shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-foreground">Fetching all emails…</p>
+          <p className="text-xs text-muted-foreground">Delete, Archive and other actions will appear once every email is loaded.</p>
+        </div>
+      </div>
+    );
+  }
+
   if (selectedCount === 0 && !deleting) return null;
 
   return (

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Mail, Inbox, Users, HardDrive, LogOut, Search, Menu, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,43 +15,77 @@ import FilterSidebar from "@/components/dashboard/FilterSidebar";
 import EmailList from "@/components/dashboard/EmailList";
 import BulkActionBar from "@/components/dashboard/BulkActionBar";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+
+const FILTER_LABELS: Record<string, string> = {
+  personal: "Personal",
+  work: "Work",
+  promotions: "Promotions",
+  newsletters: "Newsletters",
+  social: "Social Media",
+  forums: "Forums",
+  finance: "Finance",
+  spam: "Spam-like",
+  unread: "Unread",
+  attachments: "With Attachments",
+  large: "Large (>5 MB)",
+  starred: "Starred",
+  "1month": "Last Month",
+  "6months": "Last 6 Months",
+  "1year": "Last Year",
+  older: "Older than 1 Year",
+  "2years": "Older than 2 Years",
+  "3years": "Older than 3 Years",
+};
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user, signOut } = useAuth();
-  const { emails, stats, loading, loadingMore, deleting, error, hasMore, fetchEmails, loadMoreEmails, loadAllEmails, fetchStats, trashEmails, trashAllByQuery, archiveEmails, markAsRead } = useGmailApi();
+  const {
+    emails,
+    stats,
+    loading,
+    loadingMore,
+    deleting,
+    error,
+    hasMore,
+    fetchEmails,
+    loadMoreEmails,
+    loadAllEmails,
+    fetchStats,
+    trashEmails,
+    trashAllByQuery,
+    archiveEmails,
+    markAsRead,
+  } = useGmailApi();
 
   const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
   const [selectedEmails, setSelectedEmails] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"overview" | "emails">("overview");
+  const [trashAllOpen, setTrashAllOpen] = useState(false);
 
-  // Fetch data on mount
+  // Ref to avoid stale closure in the load-all effect
+  const loadAllRef = useRef(loadAllEmails);
+  loadAllRef.current = loadAllEmails;
+
+  // ── Fetch stats on mount ────────────────────────────────────────────────────
   useEffect(() => {
     fetchStats().catch(console.error);
   }, [fetchStats]);
 
-  // Calculate top senders
-  const topSenders = emails.reduce((acc, email) => {
-    const sender = email.sender;
-    const emailAddr = email.senderEmail;
-    const key = `sender:${emailAddr}`;
-    if (!acc[key]) {
-      acc[key] = { id: key, label: sender, count: 0 };
-    }
-    acc[key].count++;
-    return acc;
-  }, {} as Record<string, { id: string; label: string; count: number }>);
-
-  const allSenders = Object.values(topSenders)
-    .sort((a, b) => b.count - a.count)
-    .map(({ id, label }) => ({ id, label }));
-
-  // Construct Gmail query from filters
-  const buildGmailQuery = (filters: string[]) => {
-    if (filters.length === 0) return undefined;
-
+  // ── Build Gmail query from active filters ───────────────────────────────────
+  const buildGmailQuery = useCallback((filters: string[]): string => {
     const categoryMap: Record<string, string> = {
       personal: "category:personal",
       work: "category:primary",
@@ -62,79 +96,89 @@ const Dashboard = () => {
       finance: "category:updates",
       spam: "in:spam",
     };
-
     const typeMap: Record<string, string> = {
       unread: "is:unread",
       attachments: "has:attachment",
       large: "larger:5M",
       starred: "is:starred",
     };
-
     const timeMap: Record<string, string> = {
       "1month": "newer_than:1m",
       "6months": "newer_than:6m",
       "1year": "newer_than:1y",
-      "older": "older_than:1y",
+      older: "older_than:1y",
       "2years": "older_than:2y",
       "3years": "older_than:3y",
     };
 
-    const categories = filters.filter(f => categoryMap[f]).map(f => categoryMap[f]);
-    const types = filters.filter(f => typeMap[f]).map(f => typeMap[f]);
-    const times = filters.filter(f => timeMap[f]).map(f => timeMap[f]);
-    const senders = filters.filter(f => f.startsWith("sender:")).map(f => `from:${f.split(":")[1]}`);
+    const categories = filters.filter((f) => categoryMap[f]).map((f) => categoryMap[f]);
+    const types = filters.filter((f) => typeMap[f]).map((f) => typeMap[f]);
+    const times = filters.filter((f) => timeMap[f]).map((f) => timeMap[f]);
+    const senders = filters
+      .filter((f) => f.startsWith("sender:"))
+      .map((f) => `from:${f.split(":")[1]}`);
 
-    // Combine logic: Categories with OR, others with AND
-    let queryParts = [];
+    const parts: string[] = [];
+    if (categories.length > 0)
+      parts.push(categories.length > 1 ? `{${categories.join(" ")}}` : categories[0]);
+    if (types.length > 0) parts.push(...types);
+    if (times.length > 0) parts.push(...times);
+    if (senders.length > 0)
+      parts.push(senders.length > 1 ? `{${senders.join(" ")}}` : senders[0]);
 
-    if (categories.length > 0) {
-      if (categories.length > 1) {
-        queryParts.push(`{${categories.join(" ")}}`); // {cat1 cat2} means OR in Gmail search
-      } else {
-        queryParts.push(categories[0]);
-      }
-    }
+    return parts.join(" ");
+  }, []);
 
-    if (types.length > 0) queryParts.push(...types);
-    if (times.length > 0) queryParts.push(...times);
-    if (senders.length > 0) {
-      if (senders.length > 1) {
-        queryParts.push(`{${senders.join(" ")}}`); // OR for multiple senders
-      } else {
-        queryParts.push(senders[0]);
-      }
-    }
+  const currentQuery = useCallback((): string => {
+    const q = buildGmailQuery(selectedFilters);
+    return q ? (searchQuery ? `${q} ${searchQuery}` : q) : searchQuery;
+  }, [buildGmailQuery, selectedFilters, searchQuery]);
 
-    return queryParts.join(" ");
+  const filterLabel = (): string => {
+    if (selectedFilters.length === 0 && !searchQuery) return "All Emails";
+    const labels = selectedFilters.map((f) => FILTER_LABELS[f] || f);
+    if (searchQuery) labels.push(`"${searchQuery}"`);
+    return labels.join(", ");
   };
 
-  // ... rest of UseEffect ...
+  const hasActiveFilter = selectedFilters.length > 0 || !!searchQuery;
 
-  // ... inside render ...
-
-
-  // Fetch emails when filters or search query changes
+  // ── Scenario 1 + 2: When filters change, fetch first page THEN auto-load all pages
   useEffect(() => {
-    const filterQuery = buildGmailQuery(selectedFilters);
-    // Combine filter query with search bar query if both exist
-    let finalQuery = filterQuery;
-    if (searchQuery) {
-      finalQuery = finalQuery ? `${finalQuery} ${searchQuery}` : searchQuery;
-    }
+    const q = currentQuery() || undefined;
+    fetchEmails(50, true, q)
+      .then(() => loadAllRef.current(q))
+      .catch(console.error);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedFilters, searchQuery]);
 
-    // Debounce could be added here if needed, but for now direct call
-    fetchEmails(50, true, finalQuery).catch(console.error);
-  }, [fetchEmails, selectedFilters, searchQuery]); // Added searchQuery to dependency to trigger server-side search
+  // ── Top senders (derived) ──────────────────────────────────────────────────
+  const allSenders = Object.values(
+    emails.reduce((acc, email) => {
+      const key = `sender:${email.senderEmail}`;
+      if (!acc[key]) acc[key] = { id: key, label: email.sender, count: 0 };
+      acc[key].count++;
+      return acc;
+    }, {} as Record<string, { id: string; label: string; count: number }>)
+  )
+    .sort((a, b) => b.count - a.count)
+    .map(({ id, label }) => ({ id, label }));
 
+  // ── Category counts ────────────────────────────────────────────────────────
+  const categoryCounts = emails.reduce((acc, email) => {
+    acc[email.category] = (acc[email.category] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  // ── Refresh ────────────────────────────────────────────────────────────────
   const handleRefresh = async () => {
     try {
-      const query = buildGmailQuery(selectedFilters);
-      await Promise.all([fetchEmails(50, true, query ? (searchQuery ? `${query} ${searchQuery}` : query) : searchQuery), fetchStats()]);
-      toast({
-        title: "Refreshed",
-        description: "Email list updated successfully.",
-      });
-    } catch (err) {
+      const q = currentQuery() || undefined;
+      await fetchEmails(50, true, q);
+      await loadAllEmails(q);
+      await fetchStats();
+      toast({ title: "Refreshed", description: "Email list updated." });
+    } catch {
       toast({
         title: "Error",
         description: error || "Failed to refresh emails.",
@@ -144,112 +188,85 @@ const Dashboard = () => {
     }
   };
 
-  const currentQuery = () => {
-    const q = buildGmailQuery(selectedFilters);
-    return q ? (searchQuery ? `${q} ${searchQuery}` : q) : searchQuery;
-  };
-
   const handleLogout = async () => {
     await signOut();
     navigate("/");
   };
 
+  // ── Selected-email actions ─────────────────────────────────────────────────
   const handleDelete = async () => {
     if (selectedEmails.length === 0) return;
-
     try {
       const result = await trashEmails(selectedEmails);
-      toast({
-        title: "Moved to Trash",
-        description: `${result.trashedCount} email(s) moved to trash.`,
-      });
+      toast({ title: "Moved to Trash", description: `${result.trashedCount} email(s) moved to trash.` });
       setSelectedEmails([]);
-      // Refresh list from server so next page of filtered emails loads in
-      // and trashed emails are fully gone even if optimistic removal missed some
-      fetchEmails(50, true, currentQuery() || undefined).catch(console.error);
-    } catch (err) {
-      toast({
-        title: "Error",
-        description: "Failed to move emails to trash.",
-        variant: "destructive",
-      });
+      const q = currentQuery() || undefined;
+      fetchEmails(50, true, q).then(() => loadAllEmails(q)).catch(console.error);
+    } catch {
+      toast({ title: "Error", description: "Failed to move emails to trash.", variant: "destructive" });
     }
   };
 
   const handleArchive = async () => {
     if (selectedEmails.length === 0) return;
-
     try {
       const result = await archiveEmails(selectedEmails);
-      toast({
-        title: "Archived",
-        description: `${result.archivedCount} email(s) archived successfully.`,
-      });
+      toast({ title: "Archived", description: `${result.archivedCount} email(s) archived.` });
       setSelectedEmails([]);
       fetchEmails(50, true, currentQuery() || undefined).catch(console.error);
-    } catch (err) {
-      toast({
-        title: "Error",
-        description: "Failed to archive emails.",
-        variant: "destructive",
-      });
+    } catch {
+      toast({ title: "Error", description: "Failed to archive emails.", variant: "destructive" });
     }
   };
 
   const handleMarkRead = async () => {
     if (selectedEmails.length === 0) return;
-
     try {
       const result = await markAsRead(selectedEmails);
-      toast({
-        title: "Marked as Read",
-        description: `${result.markedCount} email(s) marked as read.`,
-      });
+      toast({ title: "Marked as Read", description: `${result.markedCount} email(s) marked as read.` });
       setSelectedEmails([]);
       fetchEmails(50, true, currentQuery() || undefined).catch(console.error);
-    } catch (err) {
-      toast({
-        title: "Error",
-        description: "Failed to mark emails as read.",
-        variant: "destructive",
-      });
+    } catch {
+      toast({ title: "Error", description: "Failed to mark emails as read.", variant: "destructive" });
     }
   };
 
-  const handleDeleteAll = async () => {
+  // ── Scenario 3 + 4: Trash All ─────────────────────────────────────────────
+  const handleTrashAllRequest = () => {
+    if (emails.length === 0) return;
+    setTrashAllOpen(true);
+  };
+
+  const handleTrashAllConfirm = async () => {
+    setTrashAllOpen(false);
     const q = currentQuery();
     if (!q) return;
-    const confirmed = window.confirm(
-      `This will permanently move ALL emails matching the current filter to Trash. Continue?`
-    );
-    if (!confirmed) return;
 
     try {
       const result = await trashAllByQuery(q);
       toast({
-        title: "Done",
-        description: `${result.trashedCount.toLocaleString()} email(s) moved to trash.`,
+        title: "✅ Done — Moved to Trash",
+        description: `${result.trashedCount.toLocaleString()} email(s) moved to Gmail Trash.`,
+        duration: 6000,
       });
+      setTimeout(() => {
+        toast({
+          title: "🗑️ Don't forget Gmail Trash",
+          description:
+            "Emails sit in Trash for 30 days before auto-deletion. Go to Gmail → Trash → 'Empty Trash Now' to free storage immediately.",
+          duration: 12000,
+        });
+      }, 1500);
       setSelectedEmails([]);
-    } catch (err) {
+      fetchStats().catch(console.error);
+    } catch {
       toast({
         title: "Error",
-        description: "Failed to delete all emails. Please try again.",
+        description: "Failed to move emails to trash. Please try again.",
         variant: "destructive",
       });
     }
   };
-
-  // Filter emails based on search query - REMOVE client side filtering since we do server side now
-  // OR keep it for instant feedback on loaded items, but usually better to rely on server for consistency
-  // For now I'll just pass `emails` strictly since `fetchEmails` handles the filtering
-  const filteredEmails = emails;
-
-  // Calculate category counts for charts
-  const categoryCounts = emails.reduce((acc, email) => {
-    acc[email.category] = (acc[email.category] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
 
   const handleSuggestionClick = (filterId: string) => {
     setActiveTab("emails");
@@ -258,7 +275,7 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
       <header className="border-b border-border bg-card sticky top-0 z-50">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -286,7 +303,7 @@ const Dashboard = () => {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search emails..."
+                placeholder="Search emails…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10"
@@ -295,23 +312,11 @@ const Dashboard = () => {
           </div>
 
           <div className="flex items-center gap-2">
-            {activeTab === "emails" && hasMore && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => loadAllEmails(currentQuery())}
-                disabled={loading || loadingMore}
-                className="hidden sm:flex items-center gap-2 mr-2"
-              >
-                <RefreshCw className={`h-3 w-3 ${loadingMore ? 'animate-spin' : ''}`} />
-                {loadingMore ? 'Loading All...' : 'Load All'}
-              </Button>
-            )}
             <Button variant="ghost" size="icon" onClick={handleRefresh} disabled={loading}>
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             </Button>
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-background border border-border text-sm">
-              <div className="w-2 h-2 bg-success rounded-full" />
+              <div className="w-2 h-2 bg-emerald-500 rounded-full" />
               <span className="text-foreground truncate max-w-[150px]">
                 {user?.email || "user@gmail.com"}
               </span>
@@ -323,38 +328,37 @@ const Dashboard = () => {
         </div>
       </header>
 
-      {/* Tab Navigation */}
+      {/* ── Tab Navigation ──────────────────────────────────────────────────── */}
       <div className="border-b border-border bg-card">
         <div className="container mx-auto px-4">
           <nav className="flex gap-6">
-            <button
-              onClick={() => setActiveTab("overview")}
-              className={`py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === "overview"
-                ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground"
+            {(["overview", "emails"] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`py-3 text-sm font-medium border-b-2 transition-colors capitalize ${
+                  activeTab === tab
+                    ? "border-primary text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
                 }`}
-            >
-              Overview
-            </button>
-            <button
-              onClick={() => setActiveTab("emails")}
-              className={`py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === "emails"
-                ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-                }`}
-            >
-              Emails
-            </button>
+              >
+                {tab}
+              </button>
+            ))}
           </nav>
         </div>
       </div>
 
-      {/* Main Content */}
+      {/* ── Main Content ────────────────────────────────────────────────────── */}
       <main className="container mx-auto px-4 py-6">
         {activeTab === "overview" ? (
           <div className="space-y-6">
-            {/* Stats Grid */}
-            <div className={`grid sm:grid-cols-2 ${stats?.storageUsed ? 'lg:grid-cols-3' : 'lg:grid-cols-2'} gap-4`}>
+            {/* Stats grid */}
+            <div
+              className={`grid sm:grid-cols-2 ${
+                stats?.storageUsed ? "lg:grid-cols-3" : "lg:grid-cols-2"
+              } gap-4`}
+            >
               <StatCard
                 title="Total Emails"
                 value={stats?.totalEmails?.toLocaleString() || emails.length.toString()}
@@ -363,9 +367,17 @@ const Dashboard = () => {
               />
               <StatCard
                 title="Social"
-                value={stats?.categories.social?.toLocaleString() || categoryCounts['Social']?.toString() || "0"}
+                value={
+                  stats?.categories.social?.toLocaleString() ||
+                  categoryCounts["Social"]?.toString() ||
+                  "0"
+                }
                 icon={Users}
-                description={`${stats?.categories.social ? Math.round((stats.categories.social / (stats.totalEmails || 1)) * 100) : 0}% of inbox`}
+                description={`${
+                  stats?.categories.social
+                    ? Math.round((stats.categories.social / (stats.totalEmails || 1)) * 100)
+                    : 0
+                }% of inbox`}
               />
               {stats?.storageUsed && (
                 <StatCard
@@ -377,13 +389,13 @@ const Dashboard = () => {
               )}
             </div>
 
-            {/* Charts Row */}
-            <div className={`grid ${stats?.storageUsed ? 'lg:grid-cols-2' : 'lg:grid-cols-1'} gap-6`}>
+            {/* Charts */}
+            <div className={`grid ${stats?.storageUsed ? "lg:grid-cols-2" : "lg:grid-cols-1"} gap-6`}>
               <CategoryChart categoryCounts={stats?.categories} />
               {stats?.storageUsed && <StorageChart />}
             </div>
 
-            {/* Inbox Health + Quick Insights */}
+            {/* Health + Insights */}
             <div className="grid lg:grid-cols-2 gap-6">
               <InboxHealthCard stats={stats} />
               <QuickInsights
@@ -395,7 +407,7 @@ const Dashboard = () => {
           </div>
         ) : (
           <div className="flex gap-6">
-            {/* Sidebar - Desktop */}
+            {/* Sidebar – desktop */}
             <div className="hidden md:block">
               <FilterSidebar
                 selectedFilters={selectedFilters}
@@ -404,49 +416,74 @@ const Dashboard = () => {
               />
             </div>
 
-            {/* Email List */}
+            {/* Email list + actions */}
             <div className="flex-1 space-y-4">
-              {/* Mobile Load All Button */}
-              <div className="md:hidden flex justify-end">
-                {hasMore && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => loadAllEmails(currentQuery())}
-                    disabled={loading || loadingMore}
-                    className="w-full"
-                  >
-                    {loadingMore ? 'Loading All...' : 'Load All Emails'}
-                  </Button>
-                )}
-              </div>
+              {/* Selection action bar (only when emails are checked) */}
               <BulkActionBar
                 selectedCount={selectedEmails.length}
-                hasActiveFilter={selectedFilters.length > 0 || !!searchQuery}
-                totalMatchingCount={stats?.categories
-                  ? undefined  // could wire a count here later
-                  : undefined}
+                hasActiveFilter={hasActiveFilter}
                 deleting={deleting}
                 onClearSelection={() => setSelectedEmails([])}
                 onDelete={handleDelete}
-                onDeleteAll={handleDeleteAll}
+                onDeleteAll={handleTrashAllRequest}
                 onArchive={handleArchive}
                 onMarkRead={handleMarkRead}
               />
+
+              {/* Email list — handles all 4 stages internally */}
               <EmailList
-                emails={filteredEmails}
+                emails={emails}
                 selectedEmails={selectedEmails}
                 onSelectionChange={setSelectedEmails}
                 loading={loading}
                 loadingMore={loadingMore}
                 hasMore={hasMore}
+                hasActiveFilter={hasActiveFilter}
+                deleting={deleting}
                 onLoadMore={() => loadMoreEmails(currentQuery())}
-                onLoadAll={() => loadAllEmails(currentQuery())}
+                onTrashAll={hasActiveFilter ? handleTrashAllRequest : undefined}
               />
             </div>
           </div>
         )}
       </main>
+
+      {/* ── Trash All Confirmation Dialog ───────────────────────────────────── */}
+      <AlertDialog open={trashAllOpen} onOpenChange={setTrashAllOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Move all emails to Trash?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm text-muted-foreground">
+                <p>
+                  You are about to move{" "}
+                  <span className="font-semibold text-foreground">
+                    {emails.length.toLocaleString()} email
+                    {emails.length !== 1 ? "s" : ""}
+                  </span>{" "}
+                  matching{" "}
+                  <span className="font-semibold text-foreground">{filterLabel()}</span> to
+                  Gmail Trash.
+                </p>
+                <ul className="space-y-1 list-disc list-inside text-xs">
+                  <li>Emails will sit in Trash for 30 days before permanent deletion.</li>
+                  <li>You can restore them from Gmail Trash during that window.</li>
+                  <li>To free storage immediately, empty Trash in Gmail afterward.</li>
+                </ul>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleTrashAllConfirm}
+              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+            >
+              Yes, Trash All {emails.length.toLocaleString()}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

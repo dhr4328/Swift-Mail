@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Paperclip, Star, Loader2 } from "lucide-react";
+import { Paperclip, Star, Loader2, Trash2, CheckCircle2 } from "lucide-react";
 import type { Email } from "@/hooks/useGmailApi";
 
 const categoryColors: Record<string, string> = {
@@ -24,8 +24,10 @@ interface EmailListProps {
   loading?: boolean;
   loadingMore?: boolean;
   hasMore?: boolean;
+  hasActiveFilter?: boolean;
+  deleting?: boolean;
   onLoadMore?: () => void;
-  onLoadAll?: () => void;
+  onTrashAll?: () => void;
 }
 
 const EmailList = ({
@@ -35,8 +37,10 @@ const EmailList = ({
   loading,
   loadingMore,
   hasMore,
+  hasActiveFilter,
+  deleting,
   onLoadMore,
-  onLoadAll,
+  onTrashAll,
 }: EmailListProps) => {
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
@@ -87,27 +91,57 @@ const EmailList = ({
     };
   }, [handleObserver]);
 
-  if (loading) {
+  // ── Stage 1: Initial full-screen loader ────────────────────────────────────
+  if (loading && emails.length === 0) {
     return (
-      <div className="flex-1 bg-card border border-border flex items-center justify-center py-20">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-muted-foreground">Loading emails...</p>
+      <div className="flex-1 bg-card border border-border rounded-lg flex items-center justify-center py-32">
+        <div className="flex flex-col items-center gap-4 text-center px-6">
+          <div className="relative">
+            <div className="w-16 h-16 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
+            <Loader2 className="absolute inset-0 m-auto h-6 w-6 text-primary animate-pulse" />
+          </div>
+          <div className="space-y-1">
+            <p className="text-base font-semibold text-foreground">Loading emails…</p>
+            <p className="text-sm text-muted-foreground">Fetching your inbox from Gmail</p>
+          </div>
         </div>
       </div>
     );
   }
 
-  if (emails.length === 0) {
+  // ── Stage 0: No filter applied, no emails ─────────────────────────────────
+  if (!loading && emails.length === 0 && !hasActiveFilter) {
     return (
-      <div className="flex-1 bg-card border border-border flex items-center justify-center py-20">
-        <p className="text-muted-foreground">No emails found</p>
+      <div className="flex-1 bg-card border border-border rounded-lg flex items-center justify-center py-20">
+        <div className="text-center space-y-2">
+          <p className="text-base font-medium text-foreground">Apply a filter to get started</p>
+          <p className="text-sm text-muted-foreground">
+            Use the sidebar to filter by category, time period, or email type.
+          </p>
+        </div>
       </div>
     );
   }
 
+  // ── Stage 2: Buffering — emails are loading but we already have some ───────
+  const isBuffering = loadingMore || (loading && emails.length > 0);
+
   return (
-    <div className="flex-1 bg-card border border-border">
+    <div className="flex-1 bg-card border border-border rounded-lg overflow-hidden relative">
+
+      {/* ── Deleting overlay ─────────────────────────────────────────────── */}
+      {deleting && (
+        <div className="absolute inset-0 z-30 bg-background/80 backdrop-blur-sm flex items-center justify-center rounded-lg">
+          <div className="flex flex-col items-center gap-4 text-center">
+            <div className="w-14 h-14 rounded-full border-4 border-destructive/20 border-t-destructive animate-spin" />
+            <div className="space-y-1">
+              <p className="text-base font-semibold text-foreground">Moving emails to Trash…</p>
+              <p className="text-sm text-muted-foreground">Please wait, this may take a moment</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Table Header */}
       <div className="flex items-center gap-4 px-4 py-3 border-b border-border bg-background">
         <Checkbox
@@ -128,8 +162,9 @@ const EmailList = ({
         {emails.map((email) => (
           <div
             key={email.id}
-            className={`flex items-center gap-4 px-4 py-3 hover:bg-background transition-colors cursor-pointer ${!email.isRead ? "bg-primary/5" : ""
-              }`}
+            className={`flex items-center gap-4 px-4 py-3 hover:bg-muted/30 transition-colors cursor-pointer ${
+              !email.isRead ? "bg-primary/5" : ""
+            }`}
             onClick={() => toggleEmail(email.id)}
           >
             <Checkbox
@@ -143,9 +178,7 @@ const EmailList = ({
                   <p className={`text-sm truncate ${!email.isRead ? "font-semibold text-foreground" : "text-foreground"}`}>
                     {email.sender}
                   </p>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {email.senderEmail}
-                  </p>
+                  <p className="text-xs text-muted-foreground truncate">{email.senderEmail}</p>
                 </div>
                 {email.isStarred && <Star className="h-4 w-4 text-warning fill-warning flex-shrink-0" />}
               </div>
@@ -156,12 +189,13 @@ const EmailList = ({
                     {email.subject}
                   </p>
                 </div>
-                <p className="text-xs text-muted-foreground truncate">
-                  {email.preview}
-                </p>
+                <p className="text-xs text-muted-foreground truncate">{email.preview}</p>
               </div>
               <div className="hidden md:block md:col-span-2">
-                <Badge variant="secondary" className={categoryColors[email.category] || "bg-secondary text-secondary-foreground"}>
+                <Badge
+                  variant="secondary"
+                  className={categoryColors[email.category] || "bg-secondary text-secondary-foreground"}
+                >
                   {email.category}
                 </Badge>
               </div>
@@ -176,30 +210,71 @@ const EmailList = ({
         ))}
       </div>
 
-      {/* Load More Trigger */}
+      {/* Load More trigger (infinite scroll) */}
       <div ref={loadMoreRef} className="h-1" />
 
-      {/* Loading More Indicator */}
-      {loadingMore && (
-        <div className="flex items-center justify-center py-4 border-t border-border">
-          <Loader2 className="h-5 w-5 animate-spin text-primary mr-2" />
-          <span className="text-sm text-muted-foreground">Loading more emails...</span>
+      {/* ── Stage 2: Buffering footer ─────────────────────────────────────── */}
+      {isBuffering && (
+        <div className="border-t border-border bg-muted/20 px-4 py-5">
+          <div className="flex items-center gap-3">
+            <Loader2 className="h-5 w-5 animate-spin text-primary flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-foreground">
+                Buffering emails… {emails.length.toLocaleString()} loaded so far
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Loading all matching emails before enabling Trash All
+              </p>
+            </div>
+            {/* Progress dots */}
+            <div className="flex gap-1">
+              {[0, 1, 2].map((i) => (
+                <div
+                  key={i}
+                  className="w-2 h-2 rounded-full bg-primary animate-bounce"
+                  style={{ animationDelay: `${i * 0.15}s` }}
+                />
+              ))}
+            </div>
+          </div>
+          {/* Indeterminate progress bar */}
+          <div className="mt-3 h-1 bg-muted rounded-full overflow-hidden">
+            <div className="h-full bg-primary rounded-full animate-pulse w-2/3" />
+          </div>
         </div>
       )}
 
-      {/* End of List */}
-      {!hasMore && emails.length > 0 && (
+      {/* ── Stage 3: All loaded — show count + Trash All ─────────────────── */}
+      {!isBuffering && !hasMore && emails.length > 0 && hasActiveFilter && !deleting && (
+        <div className="border-t border-border bg-card px-4 py-4">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-emerald-500 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-foreground">
+                  {emails.length.toLocaleString()} email{emails.length !== 1 ? "s" : ""} loaded
+                </p>
+                <p className="text-xs text-muted-foreground">All matching emails are ready</p>
+              </div>
+            </div>
+            {onTrashAll && (
+              <Button
+                variant="destructive"
+                className="gap-2 font-semibold"
+                onClick={onTrashAll}
+              >
+                <Trash2 className="h-4 w-4" />
+                Trash All {emails.length.toLocaleString()} Emails
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* No more emails message (no filter active) */}
+      {!isBuffering && !hasMore && emails.length > 0 && !hasActiveFilter && (
         <div className="text-center py-4 border-t border-border">
-          <span className="text-sm text-muted-foreground">No more emails to load</span>
-        </div>
-      )}
-
-      {/* Load All Button - Show when we have more and are not loading */}
-      {hasMore && !loading && !loadingMore && onLoadAll && (
-        <div className="flex justify-center py-4 border-t border-border">
-          <Button variant="outline" size="sm" onClick={onLoadAll}>
-            Load All Emails
-          </Button>
+          <span className="text-sm text-muted-foreground">All emails loaded</span>
         </div>
       )}
     </div>

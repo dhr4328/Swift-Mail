@@ -303,6 +303,33 @@ const BulkDeleteModal = ({
                 </p>
               )}
 
+              {/* ✔ Done: Gmail Trash reminder */}
+              {isDone && progress.deletedCount > 0 && (
+                <div className="flex gap-3 p-4 rounded-xl border border-amber-500/30 bg-amber-500/8">
+                  <span className="text-xl flex-shrink-0" aria-hidden="true">🗑️</span>
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold text-foreground">
+                      Check your Gmail Trash
+                    </p>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      The emails are now in your <span className="font-medium text-foreground">Gmail Trash</span>.
+                      To free up storage immediately, go to{" "}
+                      <a
+                        href="https://mail.google.com/mail/u/0/#trash"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline text-primary hover:text-primary/80 transition-colors"
+                      >
+                        Gmail Trash
+                      </a>{" "}
+                      and click <span className="font-medium text-foreground">&ldquo;Empty Trash Now&rdquo;</span>.
+                      Otherwise, they&apos;ll be{" "}
+                      <span className="font-medium text-amber-400">auto-deleted in 30 days</span>.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* Error message */}
               {isError && progress.error && (
                 <p className="text-xs text-destructive bg-destructive/10 rounded-lg p-3 border border-destructive/20">

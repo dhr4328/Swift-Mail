@@ -254,17 +254,28 @@ const Dashboard = () => {
   // ── Bulk delete all (via new scalable path) ────────────────────────────────
   const handleDeleteAll = () => {
     const q = currentQuery();
-    if (!q) return; // require an active filter for safety
+    if (!q && emails.length === 0) return; // nothing to delete
     setBulkModalOpen(true);
   };
 
   const handleBulkConfirm = () => {
     const q = currentQuery();
     runBulkDelete(q || undefined, (deletedCount) => {
+      // Primary success toast
       toast({
-        title: "Bulk Delete Complete",
-        description: `${deletedCount.toLocaleString()} email(s) permanently deleted.`,
+        title: "✅ Moved to Trash",
+        description: `${deletedCount.toLocaleString()} email(s) moved to Gmail Trash.`,
+        duration: 5000,
       });
+      // Follow-up reminder about Gmail Trash
+      setTimeout(() => {
+        toast({
+          title: "🗑️ Don't forget Gmail Trash",
+          description:
+            "Emails are in your Gmail Trash. Delete them there to free storage instantly, or they'll auto-delete in 30 days.",
+          duration: 12000,
+        });
+      }, 1500);
       setSelectedEmails([]);
       // Refresh display list after bulk delete
       fetchEmails(50, true, q || undefined).catch(console.error);
@@ -450,6 +461,7 @@ const Dashboard = () => {
                */}
               <BulkActionBar
                 selectedCount={selectedEmails.length}
+                loadedEmailCount={emails.length}
                 hasActiveFilter={hasActiveFilter}
                 deleting={deleting}
                 isBuffering={isBuffering}

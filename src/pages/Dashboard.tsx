@@ -455,16 +455,13 @@ const Dashboard = () => {
             <div className="flex-1 space-y-4">
               {/*
                * BulkActionBar
-               * ─ Shows buffering banner while emails are loading
-               * ─ Shows action buttons only when all emails are loaded
+               * ─ Shows selection actions when emails are checked
                * ─ "Delete All" opens the BulkDeleteModal (scalable path)
                */}
               <BulkActionBar
                 selectedCount={selectedEmails.length}
-                loadedEmailCount={emails.length}
                 hasActiveFilter={hasActiveFilter}
                 deleting={deleting}
-                isBuffering={isBuffering}
                 onClearSelection={() => setSelectedEmails([])}
                 onDelete={handleDelete}
                 onDeleteAll={handleDeleteAll}
@@ -476,6 +473,7 @@ const Dashboard = () => {
                * VirtualEmailList
                * ─ Renders only a windowed slice of the email list (no DOM bloat)
                * ─ Shows buffering overlay while pages are still loading
+               * ─ Shows "Trash All" sticky footer once all emails are loaded
                */}
               <VirtualEmailList
                 emails={emails}
@@ -486,6 +484,8 @@ const Dashboard = () => {
                 hasMore={hasMore}
                 onLoadMore={() => loadMoreEmails(currentQuery())}
                 isBuffering={isBuffering}
+                hasActiveFilter={hasActiveFilter}
+                onDeleteAll={handleDeleteAll}
               />
             </div>
           </div>

@@ -21,7 +21,8 @@
 import { useRef, useState, useEffect, useCallback } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Paperclip, Star, Loader2, MailCheck } from "lucide-react";
+import { Paperclip, Star, Loader2, MailCheck, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import type { Email } from "@/hooks/useGmailApi";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -58,6 +59,10 @@ interface VirtualEmailListProps {
   onLoadMore?: () => void;
   /** When true, show the buffering overlay and hide actions */
   isBuffering?: boolean;
+  /** True when a filter / search is active */
+  hasActiveFilter?: boolean;
+  /** Called when user clicks the post-load "Trash All" CTA */
+  onDeleteAll?: () => void;
 }
 
 // ── EmailRow (memoised) ───────────────────────────────────────────────────────
@@ -151,6 +156,8 @@ const VirtualEmailList = ({
   hasMore,
   onLoadMore,
   isBuffering,
+  hasActiveFilter,
+  onDeleteAll,
 }: VirtualEmailListProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
@@ -266,6 +273,10 @@ const VirtualEmailList = ({
 
   const visibleEmails = emails.slice(startIdx, endIdx);
 
+  // Whether to show the post-load "Trash All" CTA
+  const showTrashCTA =
+    hasActiveFilter && !isBuffering && !hasMore && !loading && emails.length > 0;
+
   return (
     <div className="flex-1 bg-card border border-border flex flex-col relative">
       {/* ── Table header (sticky) ─────────────────────────────────────────── */}
@@ -313,7 +324,7 @@ const VirtualEmailList = ({
           <div style={{ height: paddingBottom }} aria-hidden />
         )}
 
-        {/* Loading more indicator */}
+        {/* Loading more indicator (only when NOT buffering) */}
         {loadingMore && !isBuffering && (
           <div className="flex items-center justify-center py-4 border-t border-border">
             <Loader2 className="h-5 w-5 animate-spin text-primary mr-2" />
@@ -321,8 +332,8 @@ const VirtualEmailList = ({
           </div>
         )}
 
-        {/* End of list */}
-        {!hasMore && !isBuffering && emails.length > 0 && (
+        {/* End of list — shown when NOT filter-buffering (no Trash CTA yet) */}
+        {!hasMore && !isBuffering && !showTrashCTA && emails.length > 0 && (
           <div className="flex items-center justify-center gap-2 py-3 border-t border-border">
             <MailCheck className="h-4 w-4 text-green-500" />
             <span className="text-sm text-muted-foreground">
@@ -332,34 +343,90 @@ const VirtualEmailList = ({
         )}
       </div>
 
-      {/* ── Buffering overlay ─────────────────────────────────────────────── */}
+      {/* ── Buffering overlay (active while filter load in progress) ────────── */}
       {isBuffering && (
         <div
-          className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-5"
-          style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)" }}
+          className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-6"
+          style={{ background: "rgba(0,0,0,0.60)", backdropFilter: "blur(5px)" }}
         >
+          {/* Spinning ring + count */}
           <div className="relative flex items-center justify-center">
-            <svg className="animate-spin" width="72" height="72" viewBox="0 0 72 72" fill="none">
-              <circle cx="36" cy="36" r="30" stroke="white" strokeWidth="4" opacity="0.15" />
+            {/* Outer track */}
+            <svg className="animate-spin" width="80" height="80" viewBox="0 0 80 80" fill="none">
+              <circle cx="40" cy="40" r="34" stroke="white" strokeWidth="5" opacity="0.12" />
               <path
-                d="M36 6 A30 30 0 0 1 66 36"
+                d="M40 6 A34 34 0 0 1 74 40"
                 stroke="hsl(var(--primary))"
-                strokeWidth="4"
+                strokeWidth="5"
                 strokeLinecap="round"
               />
             </svg>
-            <Loader2 className="absolute h-7 w-7 animate-spin text-primary" />
+            {/* Centre count badge */}
+            <div className="absolute flex flex-col items-center leading-none">
+              <span className="text-lg font-bold text-white tabular-nums">
+                {emails.length > 0 ? emails.length.toLocaleString() : ""}
+              </span>
+              {emails.length > 0 && (
+                <span className="text-[9px] font-semibold text-white/60 uppercase tracking-widest mt-0.5">
+                  found
+                </span>
+              )}
+            </div>
           </div>
 
-          <div className="text-center space-y-1 px-6">
-            <p className="text-sm font-semibold text-white">Loading all matching emails…</p>
-            <p className="text-xs text-white/70">
-              {emails.length.toLocaleString()} fetched so far — please wait
+          {/* Status text */}
+          <div className="text-center space-y-1 px-8">
+            <p className="text-sm font-semibold text-white">
+              Loading all matching emails…
             </p>
-            <p className="text-xs text-white/40 mt-1">
-              Delete &amp; Archive will unlock once everything is loaded
+            <p className="text-xs text-white/60">
+              Please wait — Trash All will appear once everything is fetched.
             </p>
+            {/* Pulsing dots */}
+            <div className="flex justify-center gap-1.5 mt-3">
+              {[0, 1, 2].map((i) => (
+                <span
+                  key={i}
+                  className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce"
+                  style={{ animationDelay: `${i * 180}ms` }}
+                />
+              ))}
+            </div>
           </div>
+        </div>
+      )}
+
+      {/* ── Post-load Trash All footer (filter done) ────────────────────────── */}
+      {showTrashCTA && (
+        <div className="sticky bottom-0 z-10 flex items-center justify-between gap-4 px-5 py-3.5 bg-card border-t-2 border-primary/40 shadow-[0_-4px_24px_rgba(0,0,0,0.18)]">
+          <div className="flex items-center gap-3">
+            {/* Pulsing dot */}
+            <span className="relative flex h-3 w-3 flex-shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500" />
+            </span>
+            <div>
+              <p className="text-sm font-semibold text-foreground">
+                <span className="text-primary font-bold tabular-nums">
+                  {emails.length.toLocaleString()}
+                </span>
+                {" "}email{emails.length !== 1 ? "s" : ""} loaded — ready to trash
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Click &ldquo;Trash All&rdquo; to move all {emails.length.toLocaleString()} emails to Gmail Trash.
+              </p>
+            </div>
+          </div>
+
+          <Button
+            id="trash-all-btn"
+            variant="destructive"
+            onClick={onDeleteAll}
+            className="gap-2 shrink-0 bg-red-600 hover:bg-red-700 shadow-lg shadow-red-600/25 transition-all hover:shadow-red-600/40 hover:scale-105 active:scale-100"
+          >
+            <Trash2 className="h-4 w-4" />
+            Trash All ({emails.length.toLocaleString()})
+          </Button>
         </div>
       )}
     </div>

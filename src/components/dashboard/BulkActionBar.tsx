@@ -3,7 +3,6 @@ import { Button } from "@/components/ui/button";
 
 interface BulkActionBarProps {
   selectedCount: number;
-  totalMatchingCount?: number; // total on server for active filter
   hasActiveFilter: boolean;
   deleting?: boolean;
   onClearSelection: () => void;
@@ -15,7 +14,6 @@ interface BulkActionBarProps {
 
 const BulkActionBar = ({
   selectedCount,
-  totalMatchingCount,
   hasActiveFilter,
   deleting,
   onClearSelection,
@@ -24,6 +22,7 @@ const BulkActionBar = ({
   onArchive,
   onMarkRead,
 }: BulkActionBarProps) => {
+  // Nothing selected and not deleting → render nothing
   if (selectedCount === 0 && !deleting) return null;
 
   return (
@@ -47,37 +46,22 @@ const BulkActionBar = ({
         ) : (
           <div className="flex items-center gap-2">
             <Loader2 className="h-4 w-4 animate-spin" />
-            <span className="text-sm font-medium">Deleting all matching emails…</span>
+            <span className="text-sm font-medium">Deleting emails…</span>
           </div>
         )}
       </div>
 
       {!deleting && (
         <div className="flex items-center gap-2">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={onMarkRead}
-            className="gap-2"
-          >
+          <Button variant="secondary" size="sm" onClick={onMarkRead} className="gap-2">
             <MailOpen className="h-4 w-4" />
             Mark Read
           </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={onArchive}
-            className="gap-2"
-          >
+          <Button variant="secondary" size="sm" onClick={onArchive} className="gap-2">
             <Archive className="h-4 w-4" />
             Archive
           </Button>
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={onDelete}
-            className="gap-2"
-          >
+          <Button variant="destructive" size="sm" onClick={onDelete} className="gap-2">
             <Trash2 className="h-4 w-4" />
             Delete Selected
           </Button>
@@ -89,8 +73,7 @@ const BulkActionBar = ({
               className="gap-2 bg-red-700 hover:bg-red-800 border-red-800"
             >
               <Trash2 className="h-4 w-4" />
-              Delete All
-              {totalMatchingCount ? ` (${totalMatchingCount.toLocaleString()})` : ""}
+              Trash All
             </Button>
           )}
         </div>

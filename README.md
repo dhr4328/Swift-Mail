@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # 📬 Smart Gmail Cleaner — User Manual
 
 > **Smart Gmail Cleaner** (also known as Swift Mail / Inbox Zen) is a web app that helps you clean, organize, and analyze your Gmail inbox in minutes — not hours. All operations go through the Gmail API so your email content is never stored on our servers.
@@ -334,3 +335,5 @@ Yes. On mobile, tap the ☰ hamburger icon in the top-left to open the filter si
 ---
 
 *© 2026 Swift Mail — Your emails, your privacy.*
+=======
+>>>>>>> 3d26f21f92083472fe0046b5fa768114c91da1f4

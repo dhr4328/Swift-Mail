@@ -2,7 +2,11 @@ import { useEffect, useRef, useCallback } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+<<<<<<< HEAD
 import { Paperclip, Star, Loader2, Trash2, CheckCircle2 } from "lucide-react";
+=======
+import { Paperclip, Star, Loader2, MailCheck } from "lucide-react";
+>>>>>>> 3d26f21f92083472fe0046b5fa768114c91da1f4
 import type { Email } from "@/hooks/useGmailApi";
 
 const categoryColors: Record<string, string> = {
@@ -27,7 +31,11 @@ interface EmailListProps {
   hasActiveFilter?: boolean;
   deleting?: boolean;
   onLoadMore?: () => void;
+<<<<<<< HEAD
   onTrashAll?: () => void;
+=======
+  isBuffering?: boolean; // true while we're still fetching all pages
+>>>>>>> 3d26f21f92083472fe0046b5fa768114c91da1f4
 }
 
 const EmailList = ({
@@ -40,7 +48,11 @@ const EmailList = ({
   hasActiveFilter,
   deleting,
   onLoadMore,
+<<<<<<< HEAD
   onTrashAll,
+=======
+  isBuffering,
+>>>>>>> 3d26f21f92083472fe0046b5fa768114c91da1f4
 }: EmailListProps) => {
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
@@ -127,6 +139,7 @@ const EmailList = ({
   const isBuffering = loadingMore || (loading && emails.length > 0);
 
   return (
+<<<<<<< HEAD
     <div className="flex-1 bg-card border border-border rounded-lg overflow-hidden relative">
 
       {/* ── Deleting overlay ─────────────────────────────────────────────── */}
@@ -142,6 +155,9 @@ const EmailList = ({
         </div>
       )}
 
+=======
+    <div className="flex-1 bg-card border border-border relative">
+>>>>>>> 3d26f21f92083472fe0046b5fa768114c91da1f4
       {/* Table Header */}
       <div className="flex items-center gap-4 px-4 py-3 border-b border-border bg-background">
         <Checkbox
@@ -210,6 +226,7 @@ const EmailList = ({
         ))}
       </div>
 
+<<<<<<< HEAD
       {/* Load More trigger (infinite scroll) */}
       <div ref={loadMoreRef} className="h-1" />
 
@@ -275,6 +292,53 @@ const EmailList = ({
       {!isBuffering && !hasMore && emails.length > 0 && !hasActiveFilter && (
         <div className="text-center py-4 border-t border-border">
           <span className="text-sm text-muted-foreground">All emails loaded</span>
+=======
+      {/* Load More Trigger (infinite scroll sentinel) */}
+      <div ref={loadMoreRef} className="h-1" />
+
+      {/* End of List */}
+      {!hasMore && !isBuffering && emails.length > 0 && (
+        <div className="flex items-center justify-center gap-2 py-3 border-t border-border">
+          <MailCheck className="h-4 w-4 text-green-500" />
+          <span className="text-sm text-muted-foreground">
+            All {emails.length.toLocaleString()} emails loaded
+          </span>
+        </div>
+      )}
+
+      {/* Buffering overlay — blocks actions while pages are still loading */}
+      {isBuffering && (
+        <div
+          className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-5"
+          style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)" }}
+        >
+          {/* Spinning ring */}
+          <div className="relative flex items-center justify-center">
+            <svg className="animate-spin" width="72" height="72" viewBox="0 0 72 72" fill="none">
+              <circle cx="36" cy="36" r="30" stroke="white" strokeWidth="4" opacity="0.15" />
+              <path
+                d="M36 6 A30 30 0 0 1 66 36"
+                stroke="hsl(var(--primary))"
+                strokeWidth="4"
+                strokeLinecap="round"
+              />
+            </svg>
+            <Loader2 className="absolute h-7 w-7 animate-spin text-primary" />
+          </div>
+
+          {/* Status text */}
+          <div className="text-center space-y-1 px-6">
+            <p className="text-sm font-semibold text-white">
+              Loading all matching emails…
+            </p>
+            <p className="text-xs text-white/70">
+              {emails.length.toLocaleString()} fetched so far — please wait
+            </p>
+            <p className="text-xs text-white/40 mt-1">
+              Delete &amp; Archive will unlock once everything is loaded
+            </p>
+          </div>
+>>>>>>> 3d26f21f92083472fe0046b5fa768114c91da1f4
         </div>
       )}
     </div>
